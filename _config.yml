@@ -103,7 +103,7 @@ gitment:
 # https://github.com/gitalk/gitalk#install
 gitalk:
     owner: wangfengstar
-    repo: blog-comments
+    repo: wangfengstar.github.io
     clientID: e1cf9cbf2146bb40b995
     clientSecret: db372e180036e2543a3e239117f6b03b8b6c8669
 # 在使用其它评论组件时可点击显示 Disqus
