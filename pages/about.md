@@ -1,18 +1,14 @@
 ---
 layout: page
 title: About
-description: 打码改变世界
-keywords: Zhuang Ma, 马壮
+description: 布衣之旅
+keywords: 布衣之旅
 comments: true
 menu: 关于
 permalink: /about/
 ---
 
-我是马壮，码而生，码而立。
-
-仰慕「优雅编码的艺术」。
-
-坚信熟能生巧，努力改变人生。
+多年大型软件系统研发、团队管理经历，熟悉运营商计费、CRM等领域模型设计，熟悉云化PaaS平台产品研发以及技术团队的管理。
 
 ## 联系
 
