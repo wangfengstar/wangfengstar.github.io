@@ -20,8 +20,11 @@
       - kubernates
       - mesos
       - 应用调度&&资源调度
+      - 混部&混调
 
 - name: 领域模型设计
   keywords:
       - 计费
-      - CRM
+      - 商品
+      - 订单
+      - 支付
