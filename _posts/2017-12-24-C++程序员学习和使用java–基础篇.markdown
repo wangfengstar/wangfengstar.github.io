@@ -3,7 +3,7 @@ layout: post
 title: C++程序员学习和使用java–基础篇
 categories: [java编程]
 description: C++程序员学习和使用java–基础篇
-keywords: java编程
+keywords: java
 ---
 <div id='preview-contents' class='note-content'>
 

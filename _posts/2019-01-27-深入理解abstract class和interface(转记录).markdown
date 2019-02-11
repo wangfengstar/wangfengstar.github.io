@@ -4,7 +4,7 @@ title: 深入理解abstract class和interface（转发）
 categories: [java编程]
 author: 邓辉 、孙鸣
 description: 深入理解abstract class和interface（转发）
-keywords: java编程
+keywords: java
 ---
 <div id='preview-contents' class='note-content'>
 

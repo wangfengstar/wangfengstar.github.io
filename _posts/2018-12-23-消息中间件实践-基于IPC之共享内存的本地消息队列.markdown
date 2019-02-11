@@ -3,7 +3,7 @@ layout: post
 title: 消息中间件实践-基于IPC之共享内存的本地消息队列
 categories: [中间件]
 description: 消息中间件实践-基于IPC之共享内存的本地消息队列
-keywords: 中间件
+keywords: 消息中间件
 ---
 <body><div id='preview-contents' class='note-content'>
 

@@ -3,7 +3,7 @@ layout: post
 title: C++应用开发-简单完整的应用
 categories: [c++编程]
 description: C++应用开发-简单完整的应用
-keywords: c++编程
+keywords: C++
 ---
 <div id='preview-contents' class='note-content'>
 

@@ -3,7 +3,7 @@ layout: post
 title: C++应用开发-make工具的使用
 categories: [c++编程]
 description: C++应用开发-make工具的使用
-keywords: c++编程
+keywords: C++
 ---
 <div id='preview-contents' class='note-content'>
 
