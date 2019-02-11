@@ -1,19 +1,27 @@
 - name: Software Engineer Keywords
   keywords:
-      - Java
       - C++
+      - Java
+      - Go
       - Python
       - Design Patterns
 
-- name: Mobile Developer Keywords
+- name: 中间件架构设计
   keywords:
-      - Android
-      - Reverse Engineering
+      - 分布式服务框架
+      - 分布式任务计算框架
+      - 消息中间件
+      - 分布式缓存
+      - 分布式数据访问中间件
 
-- name: Windows Developer Keywords
+- name: 弹性资源调度计算
   keywords:
-      - Win32 SDK
-      - DuiLib
-      - WTL
-      - COM
-      - WinDbg
+      - Docker
+      - kubernates
+      - mesos
+      - 应用调度&&资源调度
+
+- name: 领域模型设计
+  keywords:
+      - 计费
+      - CRM
