@@ -3,7 +3,7 @@ layout: post
 title: C++应用开发-gdb工具调试（二）
 categories: [c++编程]
 description: C++应用开发-gdb工具调试（二）
-keywords: C++
+keywords: C++编程
 ---
 <div id='preview-contents' class='note-content'>
 
