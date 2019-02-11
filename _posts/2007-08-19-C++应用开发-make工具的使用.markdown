@@ -1,0 +1,144 @@
+---
+layout: post
+title: C++应用开发-make工具的使用
+categories: [c++编程]
+description: C++应用开发-make工具的使用
+keywords: c++编程
+---
+<div id='preview-contents' class='note-content'>
+
+
+
+<p>经常使用Windows平台IDE做开发的人员，可能对于makefile多少有些陌生。因为Windows下的IDE通常都将这一步封装了，只提供编译按钮，不需要开发人员人为地参与这个过程。Unix/Linux下软件开发工程项目需要开发者自己编写makefile文件。从某种程度上来讲，熟练编写makefile文件也说明了开发者具备完成大型工程的一个方面地能力。</p>
+
+<p>makefile关系到整个工程的编译规则。通常一个大型的软件工程项目拥有的源文件往往不计其数。按照工程化的思想，这些不计其数的源文件按照功能、模块分别需要放在规划好的不同的目录中。而makefile则定义了一系列的规则来指定源文件的编译顺序，以及哪些文件需要重新编译更新，甚至一些比较复杂的编译操作。通常编写好makefile文件后，就可以执行make命令进行自动化编译，从而提高开发效率。迄今为止，make工具是应用最为广泛，也是使用最多的工具。下面主要介绍makefile编写的基本规则和命令使用。 <br>
+1．makefile基本规范</p>
+
+<p>一个典型的makefile文件包含目标文件、编译连接过程以及删除编译产生的目标文件和依赖文件。其基本的构成形式如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs livecodeserver"><div class="hljs-line"><span class="hljs-keyword">command</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">     …
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">     …
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">clean:
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">     rm …
+</div></code></pre>
+
+<p>其中，目标文件可以为生成的最终可执行程序、中间工程文件以及具体执行动作等。先决条件就是生成目标文件所需要依赖的文件。这些文件生成的规则在下面的command中实现。通常，只要先决条件中有一个文件比目标文件新的话，command命令就会被执行。这就是makefile的基本规则。为了有一个清晰的认识，这里一个完整的实际例子如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs stylus"><div class="hljs-line">testMain : <span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.o</span> <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.o</span> testMain<span class="hljs-selector-class">.o</span> <span class="hljs-comment">//目标文件为程序名testMain，它依赖a.o b.o testMain.o三个中间文件</span>
+</div><div class="hljs-line">         g++ <span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.o</span> <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.o</span> testMain<span class="hljs-selector-class">.o</span> -o testMain  <span class="hljs-comment">//具体执行程序编译的命令</span>
+</div><div class="hljs-line">testMain<span class="hljs-selector-class">.o</span> :          <span class="hljs-comment">//目标文件为testMain.o中间文件命令执行</span>
+</div><div class="hljs-line">         g++ -c testMain.cpp<span class="hljs-comment">//具体程序编译成中间文件testMain.o的命令执行</span>
+</div><div class="hljs-line"><span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.o</span> : <span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.h</span> <span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.cpp</span>       <span class="hljs-comment">//目标文件为a.o中间文件命令执行，依赖于a.h a.cpp文件</span>
+</div><div class="hljs-line">         g++ -c <span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.cpp</span> <span class="hljs-comment">//具体程序编译成中间文件a.o的命令执行</span>
+</div><div class="hljs-line"><span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.o</span> : <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.h</span> <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.cpp</span>       <span class="hljs-comment">//目标文件为b.o中间文件命令执行，依赖于b.h b.cpp文件</span>
+</div><div class="hljs-line">         g++ -c <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.cpp</span> <span class="hljs-comment">//具体程序编译成中间文件b.o的命令执行</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">clean :                                                               <span class="hljs-comment">//清理程序目录动作</span>
+</div><div class="hljs-line">    rm -f testMain core *<span class="hljs-selector-class">.o</span> <span class="hljs-comment">//具体程序中清除文件的操作命令</span>
+</div></code></pre>
+
+<p>如上例子中，整个程序文件包含2个头文件，3个C++源文件。上述例子可以保存为makefile、Makefile或者任意可以命名的文件。用户可以通过make命令加-f选项来指定执行哪个makefile文件。</p>
+
+<p>根据上述实例配置的makefile在当前目录执行后的过程如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs stylus"><div class="hljs-line">[developer @localhost ~]$ make
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">    g++ -c <span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.cpp</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">    g++ -c <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.cpp</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">    g++ -c testMain<span class="hljs-selector-class">.cpp</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">    g++ <span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.o</span> <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.o</span> testMain<span class="hljs-selector-class">.o</span> -o testMain
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">[developer @localhost ~]$ make clean
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">    rm -f testMain core *<span class="hljs-selector-class">.o</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">[developer @localhost ~]$ make -f makefile
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">    g++ -c <span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.cpp</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">    g++ -c <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.cpp</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">    g++ -c testMain<span class="hljs-selector-class">.cpp</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">    g++ <span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.o</span> <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.o</span> testMain<span class="hljs-selector-class">.o</span> -o testMain
+</div></code></pre>
+
+<p>上述演示通过make命令执行实例make文件，默认情况下执行的文件名称为makefile，编译代码中间工程文件，最终完成可执行程序编译。也可以执行make的clean命令清除生成的工程文件和可执行程序文件，通过make的-f选项执行指定的名为“makefile”编译依赖关系定义文件，最终生成可执行程序。</p>
+
+<p>上述实例最终产生的一个目标文件为可执行程序testMain。它的生成依赖于a.o、b.o、testMain.o三个中间工程文件。随后下一行为其生成可执行程序的具体命令。</p>
+
+<p>这里需要注意执行具体命令的行，其开头一定要以Tab键开作为空格，这是makefile的规定。下面依次是目标文件、依赖文件和具体的执行命令。最后有一个clean，这里的clean并不是像前面的作为目标文件出现的，它是一个动作。当前shell下执行make clean命令时，执行其下面的具体清除目标文件的命令。</p>
+
+<p>2．makefile中使用变量</p>
+
+<p>通常工程实践中，makefile文件会大量的使用变量定义。这也可能造成初学者学习makefile文件困难之处。大型的工程项目中，源文件、目标中间文件、库等应用非常的多。为了便于维护makefile文件，会使用变量来替换makefile中可能会发生变化的地方。例如，生成目标文件所依赖的中间工程文件就可以采用变量来灵活替换。下面通过一个具体的实例给初学者对makefile应用有一个初步的认识。该makefile编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs stylus"><div class="hljs-line">OBJECTS=<span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.o</span> <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.o</span> testMain<span class="hljs-selector-class">.o</span> <span class="hljs-comment">//定义变量为OBJECTS，表示a.o b.o testMain.o三个中间工程文件</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">CC=g++               <span class="hljs-comment">//定义变量为CC，表示使用g++编译器</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">testMain: $(OBJECTS) <span class="hljs-comment">//目标文件为可执行程序testMain，依赖于变量OBJECTS的生成</span>
+</div><div class="hljs-line">         $(CC) $(OBJECTS) -o testMain  <span class="hljs-comment">//生成可执行程序的命令，可以使用具体变量替换查看</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">testMain<span class="hljs-selector-class">.o</span>:                            <span class="hljs-comment">//目标文件为中间文件testMain.o</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         $(CC) -c testMain<span class="hljs-selector-class">.cpp</span>         <span class="hljs-comment">//生成中间文件testMain.o的具体命令</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.o</span>:<span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.h</span> <span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.cpp</span>                          <span class="hljs-comment">//目标文件为中间文件a.o</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         $(CC) -c <span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.cpp</span>                <span class="hljs-comment">//生成中间文件a.o的具体命令</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.o</span>:<span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.h</span> <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.cpp</span>                          <span class="hljs-comment">//目标文件为中间文件b.o</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         $(CC) -c <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.cpp</span>                <span class="hljs-comment">//生成中间文件b.o的具体命令</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">clean:                                                                          
+</div><div class="hljs-line">         rm -f testMain core $(OBJECTS) <span class="hljs-comment">//具体程序中清除文件的操作命令</span>
+</div></code></pre>
+
+<p>从之前的例子中可以看出，中间生成的工程文件在makefile中被使用了两次。也就是说，一旦有新的object文件加入时，就只需要修改两处的先决条件。当前的makefile文件比较简单，所以这里添加显得不是很复杂。但是，一旦makefile文件比较复杂后，就容易造成修改地方的遗漏。那么，这种变量定义使用的方式使得删减或增加object文件只需要一处修改即可，这样makefile文件维护更加方便了。变量定义类似于C语言中宏的定义使用，变量基本定义形式很简单，取一个变量名之后，makefile文件中这样定义。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs stylus"><div class="hljs-line">OBJECTS=example1<span class="hljs-selector-class">.o</span> example2<span class="hljs-selector-class">.o</span> …
+</div></code></pre>
+
+<p>变量内容可以换行，其后加“\”符号即可。另外，编译器g++也可以采用变量来定义。在单个平台下开发通常只使用单一的C++编译器，但是Unix/Linux系统下C++编译器有多种。不同平台之间的程序移植带来的C++编译器置换，为makefile维护带来麻烦。大型的软件项目中可以将编译器的变量放在单一的文件中，根据检测系统的不同平台替换不同的C++编译器，为软件在不同平台的移植带来极大的方便。</p>
+
+<p>3．一种更为简便的方式</p>
+
+<p>makefile文件还有一种更为简便的定义方式，那就是让make程序自动推导目标文件及依赖文件之后的命令。上例修改之后如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs stylus"><div class="hljs-line">OBJECTS=<span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.o</span> <span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.o</span> testMain<span class="hljs-selector-class">.o</span> <span class="hljs-comment">//定义变量为OBJECTS，表示a.o b.o testMain.o三个中间工程文件</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">CC=g++                     <span class="hljs-comment">//定义变量为CC，表示使用g++编译器</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">testMain: $(OBJECTS)       <span class="hljs-comment">//目标文件为可执行程序testMain，依赖于变量OBJECTS的生成</span>
+</div><div class="hljs-line">         $(CC) $(OBJECTS) -o testMain<span class="hljs-comment">//生成可执行程序的命令，可以使用具体变量替换查看</span>
+</div><div class="hljs-line"><span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.o</span>:<span class="hljs-selector-tag">a</span><span class="hljs-selector-class">.h</span>                   <span class="hljs-comment">//目标文件为中间工程文件a.o，其生成依赖于头文件a.h</span>
+</div><div class="hljs-line"><span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.o</span>:<span class="hljs-selector-tag">b</span><span class="hljs-selector-class">.h</span>                   <span class="hljs-comment">//目标文件为中间工程文件b.o，其生成依赖于头文件b.h</span>
+</div><div class="hljs-line">clean:                                                                
+</div><div class="hljs-line">         rm -f testMain core $(OBJECTS)  <span class="hljs-comment">//具体程序中清除文件的操作命令</span>
+</div></code></pre>
+
+<p>如上所示，目标文件为中间工程文件下具体执行命令就不需要了。只要列出中间工程文件文件以及其依赖的头文件，make可以自动的推导出需要执行的编译的命令。可见make工具的功能是相当的强大。</p>
+
+<p>make工具基本使用情况大致如上所述。这里只简单介绍基本makefile文件的组成及其使用情况，更多的实际项目使用会在后面的项目实践中详细讲述。</p></div>
