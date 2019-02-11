@@ -1,7 +1,0 @@
----
-layout: post
-title: C++应用开发-文件系统编程-文件读写操作封装
-categories: [c++编程]
-description: C++应用开发-文件读写操作封装
-keywords: C++编程
----

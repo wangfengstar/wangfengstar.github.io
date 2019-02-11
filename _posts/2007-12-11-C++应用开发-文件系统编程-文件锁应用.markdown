@@ -1,0 +1,274 @@
+---
+layout: post
+title: C++应用开发-文件系统编程-文件锁应用
+categories: [c++编程]
+description: C++应用开发-文件锁应用
+keywords: C++编程
+---
+<div id='preview-contents' class='note-content'>
+
+
+
+<p>Linux系统下文件锁实现也是多进程之间实现共享数据同步机制的一种，该实现机制主要用于实际应用中遇到多进程同时处理同一文件下的数据同步问题处理。通常应用软件系统中，如果某个进程在操作当前一个文件进行读写，而另一个正在读取该文件的进程获取到的数据可能会遭到破坏，即可能读取到的数据不是正确所需的。这种情况下采用一种针对文件共享处理的方法来避免多进程访问同一文件造成的破坏问题，此时文件锁机制应运而生。</p>
+
+<p>由于Linux基于Unix系统而来，因此针对文件锁操作Linux系统提供两个不同的系统方法。两个不同的方法来自于Linux系统对不同的标准的支持，方法flock来源于BSD标准的支持，而方法fcntl则针对Posix标准文件锁的操作实现。Linux系统下两个不同的文件锁操作方法原型如下所示。</p>
+
+<p>//BSD标准衍生的文件锁操作方法</p>
+
+<pre><code class="language-css">
+    #include &lt;sys/file.h&gt;
+    int     flock(intfd,int operation);
+</code></pre>
+
+<p>//Posix标准提出的文件锁操作方法</p>
+
+<pre><code class="language-css">
+    #include &lt;unistd.h&gt;
+    #include &lt;fcntl.h&gt;
+    int     fcntl(intfd,int cmd,struct flock *lock);
+</code></pre>
+
+<p>Linux系统下标准的文件锁存在两种基本类型，即排他锁与共享锁。这两种锁分别对应着文件的可读写锁定情况，因此排他锁和共享锁又可以称为写锁与读锁。所谓的共享锁表现在文件来看，即当前文件可以被多个进程读取，也就是可以拥有多个共享锁。但是在某个特定时刻，文件只能被一个进程写入数据，此时加的应该是排他锁。排他锁一旦加在文件之上，那么该文件不允许其他进程再加任何锁，直到该排他锁释放为止。</p>
+
+<p>从多进程并发操作文件角度来讲，排他锁实现了同一时刻只允许一个进程写入文件数据操作，从而避免共同写入文件数据造成数据一致性问题。而共享锁则最大限度允许不同进程在读取文件时的并发操作。Linux提供的文件锁机制系统调用实现上述最基本的两种锁形式，下面将会针对系统提供文件锁操作方法作详细的使用分析。</p>
+
+<p>从BSD衍生而来的文件锁操作flock函数，该方法主要用于对系统中指定的文件进行加锁操作。该方法拥有两个参数，第一个参数为指定文件的描述符fd，前面已经分析过文件描述符是唯一标识当前文件的；第二个参数同样为一个整型参数变量，表示在指定文件上进行的锁操作，该参数存在一些标志值，用于分别表示文件上不同锁的操作。参数operation的标志值大致提供三个，分别为LOCK_SH（表示创建一个共享锁，文件处理期间共享锁可以被多个应用所拥有）、LOCK_EX（创建一个排他锁，该排他锁某个时刻只能被一个应用拥有）、LOCK_UN（删除当前进程创建的锁）。</p>
+
+<p>Linux系统下文件锁的操作主要介绍Posix标准提供的方法，函数fcntl为文件控制方法重载实现的一种。该函数增加指向结构体flock的指针参数，结构体flock由内核定义维护对应着锁的基本信息，每个锁对应着一个flock结构体实例，众多实例在由系统内核维护。该锁结构体在Linux内核中定义如下。</p>
+
+<pre><code class="language-css">
+struct flock
+{
+    …
+    short     l_type;  //文件锁的基本类型
+    short     l_whence; //支持记录锁，表示从当前文件的加锁从什么位置开始
+    short     l_start; //文件记录锁开始偏移位置
+    off_t      l_len;  //文件锁锁住记录的长度
+    pid_t     l_pid;  //锁所属进程的id
+    …
+};
+</code></pre>
+
+<p>相对于BSD衍生的文件锁操作，Posix标准下fcntl方法提供的文件锁操作功能更加的强大，事实上该函数支持文件控制等相当多的操作。从锁信息结构体来看，成员l_type值表示创建锁的基本类型，该类型通常通过方法中参数lock指针来指定设置。标志值F_RDLCK表示当前进程创建的为文件读锁，F_WRLCK表示当前创建的为文件写锁，而F_UNLCK则表示释放当前文件中指定的锁。</p>
+
+<p>结构体成员l_whence的提供表明fcntl方法操作的文件锁支持针对文件中记录加锁的操作，记录锁的出现是很多数据库中都广泛应用的。该成员值设置用于表示文件中记录开始加锁的位置，其中主要包含三个标志值，SEEK_SET表明加锁记录从文件开始位置，SEEK_CUR表明文件加锁位置从文件当前处理的位置开始，而SEEK_END表示从文件的结尾开始。</p>
+
+<p>结构体成员l_start通常与上述的l_whence成员设置值来确定文件中记录锁的开始位置，该成员主要表示从指定文件位置的偏移量开始加锁。而成员l_len则表示从文件记录位置开始向后的数据长度加锁，也就是记录锁锁住文件的数据长度了。最后一个成员表示当前创建该锁的进程。</p>
+
+<p>上述结构体成员简单说明中，基本通过设置结构体成员值来决定锁的基本类型，记录锁的基本位置，锁记录的长度等信息来创建锁，而fcntl方法中的cmd命令则用来控制是获取当前文件中锁信息，还是创建锁。</p>
+
+<p>cmd命令对应三个锁标志值，用于控制当前方法操作文件锁的功能。标志值F_SETLK表示通过外部设置锁结构体flock的成员l_type来决定当前创建锁的类型，是为读锁、写锁还是释放锁。标志F_GETLK表示当前进程可以通过文件描述符fd表示的文件获取锁的信息，该操作主要表明参数lock指向的结构在外部保存希望查询的锁类型，然后内部检查如果存在该锁将会将该锁的信息结构体返回给lock，如果不存在查询的锁，将会把成员l_type设置为释放锁返回基本信息给lock指针。另外标志值F_SETLKW，与F_SETLK不同的是该标志下的加锁操作一旦存在其它进程锁阻碍了该锁的创建，那么该进程进入休眠状态，直到该锁释放为止。</p>
+
+<p>下面将会通过Posix标准文件锁的操作fcntl操作实现一个完整的文件锁应用实例，来演示实际C++应用程序中文件锁的使用情况，该实例代码编辑如下所示。 <br>
+1）准备实例 <br>
+打开UE工具，创建新的空文件并且另存为chapter1804.cpp。该代码文件随后会同makefile文件一起通过FTP工具传输至Linux服务器端，客户端通过scrt工具访问操作。程序代码文件编辑如下所示。</p>
+
+<pre><code class="language-css">
+    /**
+    * 实例chapter1804
+    * 源文件chapter1804.cpp
+    * 文件锁进程启动唯一性应用
+    */
+    #include
+    #include
+    #include &lt;unistd.h&gt;
+    #include &lt;fcntl.h&gt;
+    #include &lt;errno.h&gt;
+    #include
+    using namespace std;
+
+    /**
+     * 运行一次方法声明.
+     *@param     filename            输入处理文件名参数.
+     * @return 处理成功返回0，否则返回-1
+     */
+    int run_onlyone(const char *filename);
+
+    /*主函数入口*/
+    int main()
+    {
+        //定义bool型变量，表示唯一运行标记，初始化值为false
+        boolrun_only_flag = false;
+        //定义选择是否唯一运行标记的变量choice，类型为字符型
+        charchoice;
+        //定义字符串类类型对象full_file_path，表明打开或创建的路径名
+        stringfull_file_path;       
+        //提示是否要进行进程唯一运行设置信息                      
+        cout&lt;&lt;"是否要设置进程唯一运行（Y/N）"&lt;&lt;endl;
+        //通过输入对象，输入是否选择进程唯一运行的变量值
+        cin&gt;&gt;choice;
+
+        if(choice== 'y' || choice == 'Y') //判断输入选择字符是否为Y或y
+        {
+            //如果输入为y或Y，则设置唯一运行标记值为true
+            run_only_flag= true;
+            cout&lt;&lt;"请输入文件路径全名："&lt;&lt;endl;  //提示输入全文件路径名
+            cin&gt;&gt;full_file_path; //通过输入对象，输入相应的路径名
+         }
+         else
+            run_only_flag= false;  //否则设置唯一运行标记值为false
+        //判断是否进程唯一运行的标记值
+         if(run_only_flag)                                                               
+         {
+            //如果为true，则执行进程唯一运行的方法
+            run_onlyone(full_file_path.c_str());
+         }         
+         while(true)  //执行while循环，条件始终为true
+         {
+            cout&lt;&lt;"testrun only once!"&lt;&lt;endl;//提示循环打印进程唯一性运行的信息
+            sleep(60); //睡眠60秒
+         }         
+         return0;
+}
+
+/*运行一次方法的定义实现*/
+int run_onlyone(const char *filename)
+{
+    //定义整型变量fd表示创建或者打开文件的描述符，
+    //整型变量val表示文件控制方法调用的结果
+    int  fd, val;
+    charbuf[10];  //定义字符型数据，长度为10，存放进程标识
+    //if判断语句定义，判断条件调用了函数open方法，
+    //该方法新创建或打开存在的文件，采用open函数调用的结果作为判断条件
+    if((fd = open(filename, O_WRONLY | O_CREAT,
+                   S_IRUSR| S_IWUSR | S_IRGRP | S_IROTH)) &lt; 0)
+    {
+        //如果open方法调用失败，返回值小于0，则直接返回
+        //值为-1则表示该方法调用失败
+        return-1;
+    }
+
+//定义设置文件记录锁状态的结构体对象lock
+structflock lock;
+//设置lock对象中l_type成员，设置锁的类型，当前设置为F_WRLCK，
+//表示定义一个独占性写锁
+lock.l_type= F_WRLCK;
+//lock对象的成员l_start、l_whence和l_len用于设置对文件是否实现分段锁定操作；
+ //l_start为0则表示锁定区域开头位置为第一个，
+ //具体哪个区域的第一个位置由l_whence决定；
+lock.l_start= 0;   
+//l_whence为SEEK_SET表明锁定区域从文件开头为起始位置                                                                                          
+lock.l_whence= SEEK_SET;  
+//设置lock对象中l_len表示锁定区域的大小，设置为0，
+//表示锁的区域从其起点开始直至最大可能位置
+lock.l_len= 0;   
+
+//if控制结构中调用fcntl方法，方法调用的结果判断用于
+//作为if控制结构的条件体；
+//fcntl方法传入打开或创建文件的描述符fd；设置cmd
+//命令值为F_SETL，表明该方法用于获取或者释放锁的
+//操作；传入锁定信息结构体对象lock；
+if(fcntl(fd, F_SETLK, &amp;lock) &lt; 0)
+{
+     //如果该方法调用失败，则进入if控制体进行运行
+     //如果错误号设置为EACCES或EAGAIN，表明在该文
+     //件上加独占写锁失败，以此表明进程创建独占写锁已经
+     //存在，则输出出错信息
+    if(errno == EACCES || errno == EAGAIN)
+    {
+         cout&lt;&lt;"进程已经在运行！"&lt;&lt;endl;
+         exit(0);//同时程序退出，确保进程运行的唯一性
+    }
+    else
+        return-1;//如果出现其它错误，则返回-1，交给方法调用的上层进行处理
+    }
+    //如果进程启动加独占写锁成功，则说明没有相同的进程
+    //存在，通过if控制结构中ftruncate方法来将打开的文
+    //件进行改变大小处理；
+    //ftruncate方法根据输入的文件描述符fd，将打开的文件
+    //按照设置的长度参数为0，将文件内容清空
+    if(ftruncate(fd, 0) &lt; 0)                                                      
+    {
+        return-1; //该方法如果调用出错，则返回-1，供外部处理使用
+    }
+    //通过sprintf函数将getpid()返回的值作为源参数，根据
+    //"%d\n"格式定义，格式化存入buf中
+    //getpid()获取当前进程的id
+    sprintf(buf,"%d\n", getpid());                                          
+    if(write(fd, buf, strlen(buf)) != strlen(buf))  //通过if控制结构中调用文件write方法，将buf中格式化的进程id写入当前文件中
+    {
+        return-1; //该方法如果调用出错，则返回-1，供外部处理使用
+    }
+    if( (val = fcntl(fd, F_GETFD, 0)) &lt; 0)
+        return-1;
+    val|= FD_CLOEXEC;
+    if(fcntl(fd, F_SETFD, val) &lt; 0)
+        return-1;
+
+return0;
+}
+</code></pre>
+
+<p>本实例程序主要用于演示文件锁在程序启动唯一性中的应用情况。程序主要由两个部分组成，函数run_onlyone定义了利用文件锁保证程序启动唯一性的具体流程，主函数主要实现了调用演示程序启动唯一性的过程，具体程序讲解见程序剖析部分。</p>
+
+<p>2）编辑makefile</p>
+
+<p>Linux平台下需要编译源文件为chapter1804.cpp，相关makefile工程文件编译命令编辑如下所示。</p>
+
+<pre><code class="language-css">
+OBJECTS=chapter1804.o
+CC=g++
+
+chapter1804: $(OBJECTS)
+         <span class="mathjax-replacement" rel="f15d8bf79a4b88b01d73201fcf0be9eb">$(CC)$</span>(OBJECTS) -g -o chapter1804
+
+clean:
+         rm-f chapter1804 core $(OBJECTS)
+
+submit:
+         cp-f -r chapter1804 ../bin
+</code></pre>
+
+<p>上述makefile文件套用前面的模板格式，主要替换了代码文件、程序编译中间文件、可执行程序等。在编译命令部分-g选项的加入，表明程序编译同时加入了可调式信息。</p>
+
+<p>3）编译运行程序 <br>
+当前shell下执行make命令，生成可执行程序文件，随后通过make submit命令提交程序文件至本实例bin目录，通过cd命令定位至bin目录，执行该程序文件运行结果如下所示。</p>
+
+<pre><code class="language-css">
+[developer@localhost src]$ make
+    g++    -c -ochapter1804.o chapter1804.cpp
+    g++ chapter1804.o -g -o chapter1804
+
+[developer @localhost src]$ make submit
+    cp -f -r chapter1804../bin
+
+[developer @localhost src]$ cd ../bin
+[developer @localhost bin]$ ./chapter1804
+    是否要设置进程唯一运行（Y/N）
+    Y
+    请输入文件路径全名：
+    /developer /wangfeng/linux_c++/chapter18/chapter1804/src/test.txt
+    test run only once!
+
+[developer @localhost bin]$ ./chapter1804
+    是否要设置进程唯一运行（Y/N）
+    Y
+    请输入文件路径全名：
+    /developer /wangfeng/linux_c++/chapter18/chapter1804/src/test.txt
+    进程已经在运行！
+</code></pre>
+
+<p>4）剖析程序 <br>
+从上述实例程序运行结果来看，首先在bin目录下启动可执行程序chapter1804，启动后程序提示是否需要设置进程唯一运行，输入Y之后表明程序需要设置相应的运行唯一性标识。</p>
+
+<p>第二步为输入文件全路径名，即包含文件名和绝对路径。关于全路径名也可以通过环境变量定义加上文件名来组合实现。输入文件全路径名定位至文件test.txt，回车键之后程序调用run_onlyone方法，判断该进程是否已经存在，如果存在提示程序已经运行，新启动的同样的进程立即退出。</p>
+
+<p>如果进程是第一次启动，则run_onlyone方法内部获取到相应的文件锁（写锁，又称为排他锁），之后将该进程的id号写入test.txt文件中。同时主流程中保持循环处理，通过while(true)内部保持60秒的睡眠时间机制保证程序第一次启动循环运行。</p>
+
+<p>随后重复启动该程序，同理按照上述过程输入相关信息。最后因为启动的进程已经存在，提示进程已经在运行而强制退出。此时是因为调用run_onlyone方法后，在获取同样文件的锁时，前面启动的进程针对该文件采用的是排他锁，该进程不释放对该锁的控制，新启动的进程便无法获取该文件的访问权限，由此来保证进程启动的唯一性。</p>
+
+<p>函数run_onlyone主要包含一个输入参数，filename为输入的文件全路径名，该参数为一字符串指针。函数内部定义两个整型变量fd和val，fd用于存放打开或创建文件之后的文件描述符，val用于存放获取文件描述符的标志信息。定义拥有10个元素的字符数组buf，用于作为字符串缓冲区。</p>
+
+<p>函数中随后通过if控制结构，内部根据打开或创建文件的方法返回的结果存入变量fd，以此作为if控制结构的判断条件。如果打开或创建文件失败，则直接返回整型数-1。文件打开或创建函数open，第一个参数filename为打开或创建的文件名，第二个参数O_WRONLY | O_CREAT表示为文件可写并且打开的文件不存在的情况下创建该文件，第三个参数S_IRUSR| S_IWUSR | S_IRGRP | S_IROTH表示该文件所有者具有可读、可写权限，并且用户组和其它用户组对其具有可读权限。</p>
+
+<p>函数run_onlyone接下来定义锁信息结构flock，通过给其成员赋值的方式来设置创建文件锁的相关信息。本实例中锁的类型l_type设置为F_WRLCK，表明该锁为写锁即排它锁，拥有该文件排它锁意味着其它进程访问将会被排斥。l_whence设置为SEEK_SET表明加锁记录从文件开始位置，lock.l_start和lock.l_len赋值为0，表明该锁为文件级，并不需要设置相应的偏移量来表明锁定的记录数据。</p>
+
+<p>随后通过fcntl方法创建排它锁，如果创建不成功则返回-1，如果该锁已经存在则输出进程已经运行信息，之后退出程序。锁创建完毕后，通过ftruncate将指定fd文件描述符所标识的文件清空。通过getpid方法获取到当前进程的pid，并且格式化放入缓字符串冲区buf，随后通过write方法写入文件中。</p>
+
+<p>最后通过fcntl方法，设置标记值为F_GETFD获取文件描述符fd相应的close-on-exec标识值，存储在变量val中。变量val与FD_CLOEXEC作或运算，其结果用于设置文件描述符fd的close-on-exec标识值，因为默认情况下文件描述符close-on-exec状态为0，需要通过FD_CLOEXEC来进行设置。</p>
+
+<p>设置了文件描述符close-on-exec状态值后，调用exec系列的进程控制方法后，如果close-on-exe标志值为0，此文件不会被关闭，如果不为0则文件会被关闭。</p>
+
+<p>主函数中，定义布尔型变量run_only_flag表示是否需要设置进程唯一性运行标识。字符变量choice表示用户输入操作，字符串类型变量full_file_path表示文件全名。通过cout打印输出是否需要设置进程唯一运行的命令操作，通过cin输入相应的相应操作数据。</p>
+
+<p>随后判断输入的操作是否需要进行进程启动唯一性保护，如果选择Y或y则设置run_only_flag为true，提示输入相应的文件全名，否则设置为false。通过if控制结构判断run_only_flag标记，为true则调用相应的run_onlyone方法进行保护。为了测试启动唯一性效果，通过while循环控制结构，设置为死循环方式，此时再次启动同样的进程才可以观察出效果。While循环中输出提示信息，另外通过sleep方法进行了间歇休眠，防止程序霸占cpu，当然该循环体中计算量小，因此对cpu占用不会太高。</p></div>
