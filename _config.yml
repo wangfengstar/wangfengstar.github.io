@@ -15,12 +15,12 @@ side_bar_repo_limit: 5
 # ---------------- #
 #      Author      #
 # ---------------- #
-author: Zhuang Ma
-organization: zkh360.com
-organization_url: http://www.zkh360.com
-github_username: mzlogin
-location: Wuhan, China
-email: chumpma@gmail.com
+author: wangfengstar
+organization:
+organization_url:
+github_username: wangfengstar
+location: NanJ, China
+email: 452622886@qq.com
 
 # ---------------- #
 #    Navigation    #
@@ -81,7 +81,7 @@ collections:
         output: true
         permalink: /wiki/:path/
 
-repository: mzlogin/mzlogin.github.io
+repository: wangfengstar/wangfengstar.github.io
 
 # ---------------- #
 #      Comments    #
@@ -95,17 +95,17 @@ disqus:
     username:
 # https://imsun.net/posts/gitment-introduction/
 gitment:
-    owner: mzlogin
+    owner: wangfengstar
     repo: blog-comments
     oauth:
-        client_id: d2e1cbbd298958076462
-        client_secret: b42a4178e5fd4a7cf63189ef4b1453b05c375709
+        client_id: e1cf9cbf2146bb40b995
+        client_secret: db372e180036e2543a3e239117f6b03b8b6c8669
 # https://github.com/gitalk/gitalk#install
 gitalk:
-    owner: mzlogin
+    owner: wangfengstar
     repo: blog-comments
-    clientID: d2e1cbbd298958076462
-    clientSecret: b42a4178e5fd4a7cf63189ef4b1453b05c375709
+    clientID: e1cf9cbf2146bb40b995
+    clientSecret: db372e180036e2543a3e239117f6b03b8b6c8669
 # 在使用其它评论组件时可点击显示 Disqus
 lazy_load_disqus : false
 
