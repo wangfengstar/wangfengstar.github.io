@@ -1,4 +1,4 @@
-- name: Software Engineer Keywords
+- name: 编程开发
   keywords:
       - C++
       - Java
@@ -28,3 +28,9 @@
       - 商品
       - 订单
       - 支付
+
+- name: 技术管理
+  keywords:
+      - 业务产品管理
+      - 技术平台产品管理
+      - 团队管理
