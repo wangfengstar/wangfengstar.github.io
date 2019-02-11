@@ -1,0 +1,255 @@
+---
+layout: post
+title: C++应用开发-文件系统编程-文件IO操作封装
+categories: [c++编程]
+description: C++应用开发-文件IO操作封装
+keywords: C++编程
+---
+<div id='preview-contents' class='note-content'>
+
+
+
+<p>Linux系统内核针对文件系统操作处理提供了一系列的系统调用方法，通过这些系统调用为用户应用程序与系统内核搭建一个操作接口。开发者可以根据系统内核提供的文件API，从而轻松的在Linux系统应用程序中处理文件。Linux系统文件API主要包含文件创建、删除、打开、读写以及控制等，下面将会详细介绍Linux系统内核提供的文件操作API的应用情况。</p>
+
+<p><strong>1.Linux系统文件API简介</strong> <br>
+介绍Linux系统文件API之前，需要对Linux下文件描述符有一个认识。Linux下文件描述符为一个整数，用来表示每个被当前应用所打开的文件。随后的所有针对文件的操作基本都通过该文件描述符来进行。描述符为一个非负的整数，从0开始依次递增标识每个被打开的对应文件，当然Linux系统针对每个应用进程打开的文件数量有一个最大值的限制，这些值通常通过相应的配置可以作修改。</p>
+
+<p>系统中的描述符有着一定的划分，比如0表示标准输入、1表示标准输出以及2表示标准错误等。系统会维护一个文件描述符的数组来组织和保存相应打开文件的描述符，用户只需要通过相应的系统调用获取打开文件的描述符就可以针对文件作其它所需要的操作。</p>
+
+<p>Linux系统针对文件系统操作提供的API主要包括文件创建、打开、读写、关闭、删除、定位以及文件操作的控制和文件锁相关的系统调用方法。对应的系统函数调用包括creat（创建文件）、open（打开文件）、read（读取文件）、write（写入文件）、close（关闭文件）、unlink（删除文件）、lseek（文件定位）、fcntl（文件控制）以及针对文件锁提供的flock方法等。下面将会针对提及常用的文件操作系统调用作使用讲述。</p>
+
+<p><strong>2.Linux系统调用之文件创建与打开操作</strong> <br>
+Linux系统调用针对文件创建于打开操作提供两个系统方法，分别为creat与open函数，其中open函数根据需要可以设定为创建或者打开已经存在的文件。两个系统调用原型如下所示。</p>
+
+<pre><code class="language-css">
+    #include &lt;sys/types.h&gt;
+    #include&lt;sys/stat.h&gt;
+    #include&lt;fcntl.h&gt;
+    int creat(constchar *pathname,mode_t mode);
+    int umask(int )
+    int open(constchar *pathname,int flags);
+    int open(constchar *pathname,int flags,mode_t mode);
+</code></pre>
+
+<p>该类系统调用需要包含一些头文件定义，其中sys/types.h头文件定义包含系统提供的数据类型原始定义，sys/stat.h头文件主要包含文件状态的定义，头文件fcntl.h则包含文件控制定义内容。文件创建与打开系统调用包含creat与两个open重载函数定义。</p>
+
+<p>函数creat与open调用成功时都会返回相应文件描述符，否则返回值为-1表示失败。其中方法creat主要参数有两个，第一个为需要创建文件指定的目录与文件名，第二个参数表示文件创建的模式定义。不同的文件模式指定可以针对文件处理作出多种限制。其中umask系统调用主要用于屏蔽掉指定文件操作权限，通常与creat方法配合使用。</p>
+
+<p>open函数主要用于创建或者打开存在的文件，当指定打开的文件不存在时，根据flags参数设定可以重新创建一个指定文件并打开。该函数调用成功依然会返回一个文件描述符，失败时返回值为-1，具体系统提供的错误号可以根据man来查询该方法的帮助信息。open函数提供两个重载实现方法，第一个只包含两个参数，一个参数为指定文件全名，另一个参数则为文件创建或打开的方式标志。该标志值有多种分别表示文件打开读写方式、文件打开一般方式以及文件同步方式三类。</p>
+
+<p>第一类文件打开读写主要包含3个标志值，分别为O_RDONLY文件只读方式、O_WRONLY文件只写方式以及O_RDWR文件读写方式三种。而第二类则主要包含O_CREAT、O_EXCL、O_APPEND以及O_TRUNC等多种文件操作方式。常见文件操作应用中该类前4个标志值比较常用，其余可以通过man帮助查询其使用说明。</p>
+
+<p>其中O_CREAT标志表示打开文件操作调用时，如果指定的文件不存在，则创建并打开该文件；而O_EXCL一般与O_CREAT一起通过或运算使用，表明如果打开的文件不存在则创建指定的文件，如果指定文件已经存在则报错；O_APPEND标志表明文件打开将会以追加的方式，即保存原始指定文件内容，直接从原文件末尾开始文件操作；而与之相反的O_TRUNC标志值则表明存在的文件打开后会被清空其内容。以上后两个设置应用在日志文件中有着应用，比如保存当天日志文件时，遇到需要记录的数据打开文件后需要采用追加的方式，如此才能保证日志的连续性。</p>
+
+<p>另外flags参数还包括一类文件方式设定，即文件同步方式。主要包含如O_SYNC表示打开的文件作一些写入操作都会阻塞进程，直到文件写入操作完成之后等这类标志值，实际使用中并不需要记忆如此多的标志值，只需要在使用时学会通过man来查询其说明即可。</p>
+
+<p>open函数第三个参数mode用于创建新文件时，指定其新文件访问方式控制。主要包含当前文件属主访问权限、文件属组内其它成员访问权限以及Linux系统其它用户访问权限的设定。该标志值通过八进制数表示，提供了一系列的标志值来表明不同情况下文件访问权限的控制，供文件打开调用时设定。同样这些标志值可以通过man open查询系统中指定调用说明来获取，具体标志值描述此处不作多讲述，这里主要介绍文件处理操作相关方法。</p>
+
+<p>3.封装实例 <br>
+1）准备实例 <br>
+打开UE工具，创建新的空文件并且另存为chapter1803.cpp。该代码文件随后会同makefile文件一起通过FTP工具传输至Linux服务器端，客户端通过scrt工具访问操作。程序代码文件编辑如下所示。</p>
+
+<pre><code class="language-css">
+    /**
+    * 实例chapter1803
+    * 源文件chapter1803.cpp
+    * 封装创建和打开文件操作实例
+    */
+    #include
+    #include
+    #include &lt;unistd.h&gt;
+    #include &lt;sys/types.h&gt;
+    #include &lt;sys/stat.h&gt;
+    #include &lt;fcntl.h&gt;
+    using namespace std;
+
+    /**
+     *打开或者创建文件的方法枚举定义.
+     *内部定义几种文件创建或打开的标记值.
+     */
+    enum OpenOrCreateMethod{OpenOrCreate_Exist, //只打开存在的文件
+           OpenOrCreate_Append, //以追加方式打开文件，并且保存文件内容
+           OpenOrCreate_Excl, //只创建不存在的文件
+           OpenOrCreate_Trunc};//打开或创建新的文件，并且销毁原来文件内容
+
+    /**
+     *文件读或者写的模式枚举定义.
+     *内部定义两种文件写或读基本属性标记值.
+     */
+    enum FileReadOrWriteMode{Read_Access  = 0x01, //申请读权限标记
+        Write_Access = 0x02};   //申请写权限标记
+
+    /**
+     *文件属性枚举定义.
+     *内部定义几种文件基本属性标记值.
+     */
+    enum FileAttributes{ FileExists  = 0x01,  //文件存在标记
+               RegularFile= 0x02,  //普通文件标记
+               DirectoryFile=0x04, //目录文件标记
+               FileHidden= 0x08,   //隐藏文件标记
+               FileReadOnly= 0x10}; //文件只读标记
+
+    /**
+     *打开文件方法.
+     * @param     path       输入处理文件名参数.
+     * @param       accessFileMode     输入存取文件标记参数.
+     *@param    openMethod              输入文件打开或者创建方式
+     *@param    fileAttributes             输入文件属性标记
+     * @return 处理成功返回打开文件的描述符，否则返回-1
+     */
+    int openFile(const string&amp; path, const intaccessFileMode,
+                   constOpenOrCreateMethod openMethod,
+                   constint fileAttributes)
+    {
+         intflags = 0;  //定义标记变量
+         intpermFlags = 0;   //定义文件权限标记变量
+          //判断是否读写权限模式打开文件
+         if ((accessFileMode &amp; Read_Access) &amp;&amp; (accessFileMode &amp;Write_Access) )
+         {
+            flags|= O_RDWR;  //标记变量与读写权限标志值之间进行按位或运算
+                     //如果if判断结构中条件为真，则flags标记值赋值为读
+                     //写都打开的标记值
+         }
+         //判断是否只读权限模式打开文件
+         else if (accessFileMode &amp; Read_Access)
+         {
+               //如果if判断结构中条件为真，则flags标记值赋值为只
+               //读标记值
+               flags |= O_RDONLY;
+         }
+         //判断是否只写权限模式打开文件
+         else if (accessFileMode &amp; Write_Access)
+        {
+                //如果if判断结构中条件为真，则flags标记值赋值为只
+                 //写标记值
+               flags |= O_WRONLY;
+         }
+         else
+         {
+             //否则输出相应文件打开错误信息
+            cout&lt;&lt;"file open error"&lt;&lt; errno &lt;&lt;endl;           
+            return -1; //返回整型-1值表明文件打开失败
+       }
+       switch(openMethod)   //选择文件打开方式
+       {
+           //打开已经存在的文件，如果设置存取文件的模式为写权限，
+           //同时定位文件末尾进行写数据
+            case OpenOrCreate_Exist:  
+                 //设置相应的标记值
+                if (accessFileMode &amp;Write_Access) flags |= O_APPEND;
+                      break;
+            //打开文件，如果该文件已经存在，同时定位至文件末尾进行数据写入
+            //否则新创建一个文件
+            case OpenOrCreate_Append:                     
+                flags |= O_CREAT | O_APPEND;      //设置相应的标记值
+                      break;
+            //创建文件，如果创建的文件已经存在，则打开文件出错；
+            //否则创建新的文件
+            case OpenOrCreate_Excl:   
+                flags |= O_CREAT | O_EXCL; //设置相应的标记值
+                break;
+            //如果该文件已经存在，并且以可写的方式打开时，
+            //此标志位会令文件长度清为0，里面的数据清除；否则创建新文件
+            case OpenOrCreate_Trunc:                         
+                flags |= O_CREAT | O_TRUNC; //设置相应的标记值
+                break;
+      }
+
+      //判断打开方式，设置文件权限
+      if (openMethod == OpenOrCreate_Excl ||openMethod == OpenOrCreate_Trunc)
+      {
+            if (fileAttributes &amp; FileReadOnly)  //判断文件设置为只读权限
+                permFlags = S_IRUSR; //则设置permFlags权限标记为只读标记值
+            else
+                permFlags = (S_IRUSR | S_IWUSR);//否则设置为可读写标记值
+      }
+
+      //调用系统提供的打开文件操作，传入文件路径名，文件创建
+      //或者打开方式标记，以及权限标记
+      int fd = open(path.c_str(), flags,permFlags);
+      //系统文件打开操作将会返回文件句柄值，通过判断该标记值
+      //判断文件打开是否失败
+      if (fd == -1)  
+      {
+            //如果文件创建、打开失败，则输出错误信息
+            cout&lt;&lt;"fileopen(path.c_str(), flags, permFlags) error= "&lt;&lt; errno &lt;&lt;endl;      
+            return -1;                                                        
+      }
+      return fd; //否则文件打开或者创建成功，返回句柄供操作该文件的方法使用
+}
+
+/*主程序入口*/
+int main()
+{
+    stringpathfile;   //主程序中定义字符串对象表示文件路径名
+    intfd; //定义文件句柄变量
+    cout&lt;&lt;"Pleaseinput pathfile:"&lt;&lt;endl; //输出输入文件路径名的提示信息
+    cin&gt;&gt;pathfile;  //从屏幕输入该文件路径名
+    //调用文件打开操作，并且设置相应的读写、以及打开文件方式
+    fd =openFile(pathfile,Read_Access|Write_Access,OpenOrCreate_Excl,RegularFile);
+    cout&lt;&lt;"Filefd:"&lt;&lt;fd&lt;&lt;endl; //打印获取的文件句柄值，查看文件打开是否成功
+    return0;
+}
+</code></pre>
+
+<p>本实例主要通过枚举定义Linux文件相关属性参数，采用C++语言封装灵活的Linux文件创建与打开操作。本程序主要由主函数与文件创建、打开两个函数组成，具体程序讲解见程序剖析部分。</p>
+
+<p>2）编辑makefile <br>
+Linux平台下需要编译的源文件为chapter1803.cpp，相关联的makefile工程文件内容编辑如下。</p>
+
+<pre><code class="language-css">
+OBJECTS=chapter1803.o
+CC=g++
+
+chapter1803: $(OBJECTS)
+    <span class="mathjax-replacement" rel="f15d8bf79a4b88b01d73201fcf0be9eb">$(CC)$</span>(OBJECTS) -g -o chapter1803
+
+clean:
+    rm -fchapter1803 core $(OBJECTS)
+
+submit:
+    cp -f -rchapter1803 ../bin
+    cp -f -r*.h ../include
+</code></pre>
+
+<p>上述makefile文件套用前面的模板格式，主要替换了代码文件、程序编译中间文件、可执行程序等。在编译命令部分-g选项的加入，表明程序编译同时加入了可调式信息。</p>
+
+<p>3）编译运行程序 <br>
+当前shell下执行make命令，生成可执行程序文件，随后make submit提交程序文件至本实例bin目录中，随后通过cd命令定位至实例bin目录，该可执行程序运行结果如下所示。</p>
+
+<pre><code class="language-css">
+[developer@localhost src]$make
+    g++    -c -ochapter1803.o chapter1803.cpp
+    g++ chapter1803.o -g -o chapter1803
+
+[developer@localhost src]$make submit
+    cp -f -r chapter1803 ../bin
+    cp -f -r *.h ../include
+
+[developer@localhost src]$cd../bin
+
+[developer@localhost src]$./chapter1803
+    Please input pathfile:
+    /home/ocs/users/wangfeng/Linux_c++/chapter18/chapter1803/bin/testFile.txt
+    File fd:3
+
+[developer@localhost src]$ll
+    总用量 16
+    -rwxr-xr-x   1 ocs      linkage     15923 1月  7 06:56 chapter1803
+    -rw-------   1 ocs      linkage         0 1月  7 06:57 testFile.txt
+</code></pre>
+
+<p>4)程序剖析 <br>
+本实例实际是在Linux系统文件打开操作系统调用open之上使用C++封装实现了openFile接口，该封装实现的方法主要用于创建或打开指定文件。实例中首先定义三个枚举类型变量，分别表示低级文件操作中的文件打开方式，文件读写方式以及文件的基本属性。三个枚举类型变量中实际为C++的中的标识，该标识用于内部组合采用实际系统调用中的各种权限模式。</p>
+
+<p>创建或打开文件方法openFile共提供四个参数，第一个参数path用于表示指定创建或打开的路径全名，第二个参数accessFileMode则用于指定创建或打开文件的读写模式，第三个参数openMethod为枚举类型OpenOrCreateMethod的对象，用于表示文件创建或打开的方式。最后一个参数fileAttributes表示文件的基本属性，即指定为普通文件、目录或者只读文件。</p>
+
+<p>创建或打开文件方法内部首先定义两个整型变量分别为flags与permFlags表示文件创建或打开的方式以及指定的权限模式，并且初始化为0。内部先根据传入的文件打开时的存取权限信息，根据传入的标志值分别与读取、写入方式作&amp;运算，如果提供两个标志值意味着文件打开方式为可读写即指定flags为O_RDWR。否则分别设置相应传入的打开方式对应的读或者写的方式，如果没有指定则默认输出出错信息，并通过errno号来说明相应错误。</p>
+
+<p>方法内部随后通过switch结构来判断相应的文件创建或打开的基本方式，是以追加的方式O_APPEND打开文件，还是以O_CREAT| O_APPEND组合、O_CREAT | O_EXCL组合还是O_CREAT | O_TRUNC组合方式来创建或者打开文件，根据传入的参数openMethod来决定。后通过if控制结构来设定文件打开时的权限模式。</p>
+
+<p>if结构内部通过比较，文件属性是否指定为只读文件，如果为只读文件，则设置S_IRUSR只读权限，否则设置可读写权限S_IRUSR | S_IWUSR。最后调用Linux下系统调用open方法，传入相应的创建或者打开文件路径全名，传入文件打开的基本方式以及文件创建的基本权限标记，创建或打开指定文件。该方法返回一个文件描述符整型值，如果打开或创建成功将会返回对应的描述符，否则返回-1。最后成功情况下openFile方法返回整型文件描述符fd。</p>
+
+<p>本实例程序主函数中，首先定义字符串对象pathfile表示路径全名，根据输入的路径名加上文件名，调用了openFile方法，本实例指定需要打开或创建的文件为pathfile，文件以可读写的方式打开即Read_Access|Write_Access，并且指定文件打开或创建方法OpenOrCreate_Excl，实际程序内部为O_CREAT | O_EXCL即表示当指定文件不存在时，创建该文件，否则文件openFile调用方法出错。最后指定文件属性为普通文件，即内部实现拥有了可读写权限。</p>
+
+<p>本实例实际运行时，根据提示传入相应的路径全名信息，随后调用openFile方法创建该文件，并通过ll –lst命令查看了新创建文件的权限为可读写。再次执行该程序创建同样文件时，根据设定会调用失败而直接返回。</p></div>
