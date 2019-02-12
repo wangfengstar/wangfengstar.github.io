@@ -137,65 +137,64 @@ int run_onlyone(const char *filename)
         //值为-1则表示该方法调用失败
         return-1;
     }
+    //定义设置文件记录锁状态的结构体对象lock
+    structflock lock;
+    //设置lock对象中l_type成员，设置锁的类型，当前设置为F_WRLCK，
+    //表示定义一个独占性写锁
+    lock.l_type= F_WRLCK;
+    //lock对象的成员l_start、l_whence和l_len用于设置对文件是否实现分段锁定操作；
+     //l_start为0则表示锁定区域开头位置为第一个，
+     //具体哪个区域的第一个位置由l_whence决定；
+    lock.l_start= 0;   
+    //l_whence为SEEK_SET表明锁定区域从文件开头为起始位置                                                                                          
+    lock.l_whence= SEEK_SET;  
+    //设置lock对象中l_len表示锁定区域的大小，设置为0，
+    //表示锁的区域从其起点开始直至最大可能位置
+    lock.l_len= 0;   
 
-//定义设置文件记录锁状态的结构体对象lock
-structflock lock;
-//设置lock对象中l_type成员，设置锁的类型，当前设置为F_WRLCK，
-//表示定义一个独占性写锁
-lock.l_type= F_WRLCK;
-//lock对象的成员l_start、l_whence和l_len用于设置对文件是否实现分段锁定操作；
- //l_start为0则表示锁定区域开头位置为第一个，
- //具体哪个区域的第一个位置由l_whence决定；
-lock.l_start= 0;   
-//l_whence为SEEK_SET表明锁定区域从文件开头为起始位置                                                                                          
-lock.l_whence= SEEK_SET;  
-//设置lock对象中l_len表示锁定区域的大小，设置为0，
-//表示锁的区域从其起点开始直至最大可能位置
-lock.l_len= 0;   
+    //if控制结构中调用fcntl方法，方法调用的结果判断用于
+    //作为if控制结构的条件体；
+    //fcntl方法传入打开或创建文件的描述符fd；设置cmd
+    //命令值为F_SETL，表明该方法用于获取或者释放锁的
+    //操作；传入锁定信息结构体对象lock；
+    if(fcntl(fd, F_SETLK, &amp;lock) &lt; 0)
+    {
+         //如果该方法调用失败，则进入if控制体进行运行
+         //如果错误号设置为EACCES或EAGAIN，表明在该文
+         //件上加独占写锁失败，以此表明进程创建独占写锁已经
+         //存在，则输出出错信息
+        if(errno == EACCES || errno == EAGAIN)
+        {
+             cout&lt;&lt;"进程已经在运行！"&lt;&lt;endl;
+             exit(0);//同时程序退出，确保进程运行的唯一性
+        }
+        else
+            return-1;//如果出现其它错误，则返回-1，交给方法调用的上层进行处理
+        }
+        //如果进程启动加独占写锁成功，则说明没有相同的进程
+        //存在，通过if控制结构中ftruncate方法来将打开的文
+        //件进行改变大小处理；
+        //ftruncate方法根据输入的文件描述符fd，将打开的文件
+        //按照设置的长度参数为0，将文件内容清空
+        if(ftruncate(fd, 0) &lt; 0)                                                      
+        {
+            return-1; //该方法如果调用出错，则返回-1，供外部处理使用
+        }
+        //通过sprintf函数将getpid()返回的值作为源参数，根据
+        //"%d\n"格式定义，格式化存入buf中
+        //getpid()获取当前进程的id
+        sprintf(buf,"%d\n", getpid());                                          
+        if(write(fd, buf, strlen(buf)) != strlen(buf))  //通过if控制结构中调用文件write方法，将buf中格式化的进程id写入当前文件中
+        {
+            return-1; //该方法如果调用出错，则返回-1，供外部处理使用
+        }
+        if( (val = fcntl(fd, F_GETFD, 0)) &lt; 0)
+            return-1;
+        val|= FD_CLOEXEC;
+        if(fcntl(fd, F_SETFD, val) &lt; 0)
+            return-1;
 
-//if控制结构中调用fcntl方法，方法调用的结果判断用于
-//作为if控制结构的条件体；
-//fcntl方法传入打开或创建文件的描述符fd；设置cmd
-//命令值为F_SETL，表明该方法用于获取或者释放锁的
-//操作；传入锁定信息结构体对象lock；
-if(fcntl(fd, F_SETLK, &amp;lock) &lt; 0)
-{
-     //如果该方法调用失败，则进入if控制体进行运行
-     //如果错误号设置为EACCES或EAGAIN，表明在该文
-     //件上加独占写锁失败，以此表明进程创建独占写锁已经
-     //存在，则输出出错信息
-    if(errno == EACCES || errno == EAGAIN)
-    {
-         cout&lt;&lt;"进程已经在运行！"&lt;&lt;endl;
-         exit(0);//同时程序退出，确保进程运行的唯一性
-    }
-    else
-        return-1;//如果出现其它错误，则返回-1，交给方法调用的上层进行处理
-    }
-    //如果进程启动加独占写锁成功，则说明没有相同的进程
-    //存在，通过if控制结构中ftruncate方法来将打开的文
-    //件进行改变大小处理；
-    //ftruncate方法根据输入的文件描述符fd，将打开的文件
-    //按照设置的长度参数为0，将文件内容清空
-    if(ftruncate(fd, 0) &lt; 0)                                                      
-    {
-        return-1; //该方法如果调用出错，则返回-1，供外部处理使用
-    }
-    //通过sprintf函数将getpid()返回的值作为源参数，根据
-    //"%d\n"格式定义，格式化存入buf中
-    //getpid()获取当前进程的id
-    sprintf(buf,"%d\n", getpid());                                          
-    if(write(fd, buf, strlen(buf)) != strlen(buf))  //通过if控制结构中调用文件write方法，将buf中格式化的进程id写入当前文件中
-    {
-        return-1; //该方法如果调用出错，则返回-1，供外部处理使用
-    }
-    if( (val = fcntl(fd, F_GETFD, 0)) &lt; 0)
-        return-1;
-    val|= FD_CLOEXEC;
-    if(fcntl(fd, F_SETFD, val) &lt; 0)
-        return-1;
-
-return0;
+    return0;
 }
 </code></pre>
 
