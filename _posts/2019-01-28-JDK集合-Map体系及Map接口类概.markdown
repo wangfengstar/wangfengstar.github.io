@@ -10,7 +10,7 @@ keywords: java编程
 
 
 Map集合是java程序中使用频度比较高的JDK提供的特性，熟悉理解Map体系构建以及Map中衍生的一系列场景的集合结构实现，对开发java应用程序有帮助，这就跟c++程序员需要熟悉一系列相应数据结构实现一样。 <br>
-这里我们借助梳理Map结构体系，剖析两个最常用的HashMap和ConcurrentHashMap，来了解和掌握各类实现map结构以及使用场景。（本笔记主要以JDK1.7版本为例）</p>
+这里我们借助梳理Map结构体系，剖析两个最常用的HashMap和ConcurrentHashMap，来了解和掌握各类实现map结构以及使用场景。（本笔记主要以JDK1.7版本为例）
 
 <p><strong>1.Map结构体系在JDK体系中位置</strong></p>
 
