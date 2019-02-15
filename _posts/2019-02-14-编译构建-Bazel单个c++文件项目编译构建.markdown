@@ -9,7 +9,7 @@ keywords: 编译构建
 
 
 
-<p>在Linux环境中安装部署好Bazel工具之后，就可以开始使用它来编译构建项目了，这类结合前面介绍的基本概念，我们来看一下一个基本的Bazel构建的项目大概实际构成如何。</p>
+<p>在Linux环境中安装部署好Bazel工具之后，就可以开始使用它来编译构建项目了，这类结合前面介绍的基本概念，我们来看一下一个基本的Bazel构建的项目大概实际构成如何。注意这里是单个package实例项目。</p>
 
 <pre><code class="language-css">
 └──TestBazelPg
@@ -32,9 +32,9 @@ keywords: 编译构建
 <p>//简单的打印输出时间：</p>
 
 <pre><code class="language-css">
-    #include &lt;ctime&gt;
-    #include &lt;string&gt;
-    #include &lt;iostream&gt;
+#include &lt;ctime&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
 std::string get_greet(const std::string&amp; who) {
   return "Hello " + who;
 }
