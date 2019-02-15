@@ -33,9 +33,9 @@ keywords: 编译构建
 源文件PrintfTime.h</p>
 
 <pre><code class="language-css">
-    #include
-    #include
-    #include
+    #include &lt;ctime&gt;
+    #include &lt;string&gt;
+    #include &lt;iostream&gt;
     std::string get_greet(const std::string&amp; who);
     void print_localtime();
 </code></pre>
