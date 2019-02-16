@@ -46,7 +46,7 @@ keywords: 编译构建
     #include &lt;<iostream>&gt;
     std::string get_greet(const std::string&amp; who);
     void print_localtime();
-</code></pre>
+  </code></pre>
 
 <p>源文件PrintfTime.cpp</p>
 
