@@ -41,12 +41,12 @@ keywords: 编译构建
 头文件PrintfTime.h</p>
 
 <pre><code class="language-css">
-    #include &lt;<ctime>&gt;
-    #include &lt;<string>&gt;
-    #include &lt;<iostream>&gt;
+    #include
+    #include
+    #include
     std::string get_greet(const std::string&amp; who);
     void print_localtime();
-  </code></pre>
+</code></pre>
 
 <p>源文件PrintfTime.cpp</p>
 
