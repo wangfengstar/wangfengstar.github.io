@@ -1,8 +1,0 @@
----
-layout: post
-title: test
-categories: [编译构建]
-description: test
-keywords: test
----
-![jdk-spi2](9D480CC738B8486A8D40AEEEAB90450B)
