@@ -1,6 +1,6 @@
 ---
 layout: post
-title: 大数据-MapReduce1.0代码结构分析
+title: MapReduce1.0代码结构分析
 categories: [大数据]
 description: 大数据-MapReduce1.0代码结构分析
 keywords: 大数据 MapReduce
