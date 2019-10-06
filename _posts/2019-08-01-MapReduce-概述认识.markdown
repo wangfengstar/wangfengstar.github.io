@@ -1,6 +1,6 @@
 ---
 layout: post
-title: MapReduce概述认识
+title: MapReduce-概述认识
 categories: [大数据]
 description: 大数据-MapReduce概述认识
 keywords: 大数据 MapReduce
