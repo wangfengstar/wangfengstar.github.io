@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 消息中间件实践-基于IPC之共享内存的本地消息队列
-categories: [中间件]
+categories: [中间件技术]
 description: 消息中间件实践-基于IPC之共享内存的本地消息队列
 keywords: 消息中间件
 ---

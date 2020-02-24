@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 中间件平台概述
-categories: [中间件]
+categories: [中间件技术]
 description: 中间件平台概述
 keywords: 中间件平台概述
 ---

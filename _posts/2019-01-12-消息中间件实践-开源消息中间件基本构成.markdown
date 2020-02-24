@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 消息中间件实践-现代消息中间件基本构成
-categories: [中间件]
+categories: [中间件技术]
 description: 消息中间件实践-现代消息中间件基本构成
 keywords: 消息中间件
 ---
