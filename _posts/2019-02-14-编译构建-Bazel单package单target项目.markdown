@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 编译构建-Bazel单package单target项目
-categories: [编译构建]
+categories: [开发管理]
 description: 编译构建-Bazel单package单target项目
 keywords: 编译构建
 ---
