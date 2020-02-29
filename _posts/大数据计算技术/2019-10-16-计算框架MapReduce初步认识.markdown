@@ -1,7 +1,7 @@
 ---
 layout: post
 title: MapReduce初步认识
-categories: 大数据计算技术,大数据计算框架
+categories: [大数据计算技术,大数据计算框架]
 description: MapReduce框架
 keywords: mapreduce
 ---
