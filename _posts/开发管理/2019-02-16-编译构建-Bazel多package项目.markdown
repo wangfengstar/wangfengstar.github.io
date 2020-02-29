@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 编译构建-Bazel多package项目
-categories: [开发管理,编译构建]
+categories: 开发管理
 description: 编译构建-Bazel多package项目
 keywords: 编译构建
 ---
