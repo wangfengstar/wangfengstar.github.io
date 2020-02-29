@@ -1,0 +1,1037 @@
+---
+layout: post
+title: C++应用开发-进程通信之消息队列
+categories: c++编程
+description: C++应用开发-进程通信之消息队列
+keywords: C++编程
+---
+<div id='preview-contents' class='note-content'>
+
+
+
+<p>Linux系统下进程通信处理比较原始的管道方式以外，消息队列也是很多应用场合考虑使用的通信方式之一。消息队列通信方式也可以称为报文队列，在系统内核中消息队列实际上是实现消息的链表结构。Linux系统下包含Posix标准与system V标准的消息队列，两种标准实现的消息队列在不同的场合都被广泛应用。system V标准的消息队列早期出现，因此相当一部分现有应用中都可见其身影；而Posix标准消息队列则充分考虑了开发应用中的可移植性，本章主要以system V标准方式来介绍消息队列在Linux系统下进程通信中的应用。</p>
+
+<p>Linux系统中消息队列实现进程通信的方式应用非常广泛，在相当多的比如银行、电信等领域存在着相当多的客户机/服务器模式应用，这些应用中在主机内部进程通信处理上或多或少都会发现消息队列应用的影子。消息队列的应用让进程通信的数据按照固定的顺序，实现主机内进程之间的通信，从而保证了进程数据通信的一致性与安全性。</p>
+
+<p>1.消息队列基本概念 <br>
+不同于前面介绍的信号量通信方式，消息队列与信号量不同的是可以承载更多的信息量在进程之间实现通信。而前面介绍的管道通信，虽然能够传输比信号量多的信息，但是管道中传输的是属于无格式的字节流数据，相对于进程通信中需要规定一定结构的信息通信来讲，消息队列显得更合适。</p>
+
+<p>Linux系统下消息队列实现进程通信，需要从几个角度理解相应的基本概念与对应的操作情况，从而掌握消息队列这种基本的进程通信方式。首先，与前面介绍进程通信的手段相同，消息队列的通信方式支持在Linux系统上同样存在两个标准的支持，即POSIX标准消息队列与System V消息队列两种。本文主要以介绍System V消息队列为主。 <br>
+消息队列可以被看作是消息的一个链表结构实现，队列结构为内核实现，但是其中的需要通信的消息通常是开发者在实际应用中定义实现的。消息在消息队列中可以看作以记录的形式在实现传输通信，进程主要拥有对消息队列的读写权限，就可以随意从消息队列读取或者写入数据。</p>
+
+<p>2.消息队列结构定义</p>
+
+<p>Linux系统下消息队列结构可以看作是承载消息的链表结构，每个队列都由队列头以及具体的数据节点组成。其中队列头则是由内核的msg_queue来表示的，该结构的具体定义可以通过查看内核源码得知，下面将会简单列出该结构体的基本定义，初学者可以了解在内核实现的消息队列结构头部的情况。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-keyword">struct</span> msg_queue
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span>  kern_ipc_perm q_perm;
+</div><div class="hljs-line">    <span class="hljs-keyword">time_t</span>  q_stime;                <span class="hljs-comment">//最后次消息发送时间</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">time_t</span>  q_rtime;                <span class="hljs-comment">//最后次消息接收时间</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">time_t</span>  q_ctime;                <span class="hljs-comment">//最后次修改队列时间</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">long</span> q_cbytes;         <span class="hljs-comment">//队列中当前的数据字节数</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">long</span> q_qnum;           <span class="hljs-comment">//当前消息队列中消息的数目</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">long</span> q_qbytes;         <span class="hljs-comment">//当前消息队列中最大可容数据字节数</span>
+</div><div class="hljs-line">    …
+</div><div class="hljs-line">};
+</div></code></pre>
+
+<p>Linux内核中，消息队列的头部结构定义中，第一个成员为结构体对象。结构体kern_ipc_perm用于记录当前消息队列的基本信息，用于内核在全局管理的数据中能够通过访问该结构的相关数据从而获取到需要处理的消息队列。该结构体定义情况可以如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-keyword">struct</span> kern_ipc_perm
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">key_t</span>  key;         <span class="hljs-comment">//消息队列的键值</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">uid_t</span>  uid;         <span class="hljs-comment">//</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">gid_t</span>  gid;
+</div><div class="hljs-line">    <span class="hljs-keyword">uid_t</span>  cuid;
+</div><div class="hljs-line">    <span class="hljs-keyword">gid_t</span>  cgid;
+</div><div class="hljs-line">    <span class="hljs-keyword">mode_t</span>  mode;
+</div><div class="hljs-line">    <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">long</span> seq;
+</div><div class="hljs-line">};
+</div></code></pre>
+
+<p>内核中可以往往可以通过访问该具体需要通信使用的消息队列的头部第一个成员，通过该成员中的key值就可以唯一的确定当前所要操作的消息队列，从而让进程可以在该消息队列上实现所需要的数据通信。而具体内核怎么去找到相应的操作消息队列的头部，感兴趣的初学者可以通过阅读内核关于消息队列的处理部分源码，从而深入学习具体实现情况。</p>
+
+<p>对于消息队列这种进程通信手段，初学者需要知道在Linux系统中，对于消息队列都提供哪些基本的操作可供实际应用中使用。基本与其它通信方式相似，消息队列的基本操作也可以分为创建、读写数据以及相应的控制几个部分，下面将会从消息队列的创建到基本操作应用的角度入手，介绍消息队列在Linux系统中具体的支持和应用情况。</p>
+
+<p>3.消息队列创建</p>
+
+<p>消息队列的创建同样由内核内部完成，通过对外提供相应创建操作的接口，开发人员可以方便简洁的创建所需要使用的消息队列。通过前面的简单介绍，创建相应的消息队列相当于在内核中建立一个对应的消息结构的链表。</p>
+
+<p>对于Linux内核来讲，系统内部所有消息队列的相关信息都在内核中维护的结构体ipc_ids中有全局的记录。消息队列主要包含队列头部与相应的队列数据节点，即对应的消息具体数据。实际上创建消息队列就类似于建立一个承载消息的链表数据结构，而该结构的实现由内核来完成，前面介绍过大致队列头部包含了相应的消息队列对应的键值、用户的ID、消息队列中消息数目等具体信息。 <br>
+1）消息队列创建系统调用 <br>
+对于初学者开发人员来讲，内核具体实现消息队列的原理并不需要非常清楚，主要了解Linux系统中对于消息队列的创建提供的具体操作方法即可。系统为创建消息队列提供了msgget方法，原型如下。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs autoit"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/msg.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-built_in">int</span> msgget(ket_t key,<span class="hljs-built_in">int</span> msgflg)<span class="hljs-comment">;</span>
+</div></code></pre>
+
+<p>该方法主要用于根据指定的key值打开或者创建一个新的消息队列用于进程通信。方法共有两个参数，第一个参数key用于指定消息队列的键值，唯一标识对应创建的消息队列，在系统中key值实际为一个长整型数，通常在实际应用中消息队列、共享内存等key值都会统一规划设定好固定值，用于统一创建管理。</p>
+
+<p>第二个参数msgflg为创建时指定的相应标志值，主要包括消息队列的创建标志与其存取权限标志的指定。消息队列的创建标志主要包含两个分别为IPC_CREAT、IPC_EXCL，其中IPC_CREAT表示如果指定的key值的消息队列在系统中不存，则创建一个指定key值的消息队列，否则将会打开现有的key值消息队列，获取其操作符。而标志值IPC_EXCL表示当指定key值得消息队列不存在时创建之，否则调用该方法将会报错。</p>
+
+<p>在实际应用中，消息队列的创建通常结合IPC_CREAT与IPC_EXCL两个标志值或运算来保证创建一个指定key值的消息队列，如果指定的key与系统中现有的消息队列值相重复，那么创建时会报错提示。通常key值也存在两种情况的设定，第一是可以设置为IPC_PRIVATE，一旦设置该标志值之后，调用该方法创建一个新的消息队列，在实际使用时需要获取与该消息队列对应的标识符。另外一种即非IPC_PRIVATE型的key值，大部分应用中都使用直接指定相应key值情形，通过第二个参数设置来确保指定创建的消息队列的唯一性。</p>
+
+<p>参数msgflg还有一类指定的标志值，那就是创建的消息队列对应的访问权限的设置。消息队列对应的打开或者创建用户有两个标志值，分别为MSG_R表示用户读消息队列权限，MSG_W当前用户写消息队列权限，并且规定了组用户以及对应其它用户读写权限的标志值，分别为MSG_R&gt;&gt;3、MSG_W&gt;&gt;3与MSG_R&gt;&gt;6、MSG_W&gt;&gt;6值设定。</p>
+
+<p>当实际应用中调用该方法创建指定key值的消息队列，如果创建成功该方法将会返回消息队列相应的整型值描述符，供进程获取进行后续操作；如果创建方法不成功，该方法返回整型值-1，相应的错误标志值会置入errno中，该方法主要的错误产生标志值可以为EACCES（指定的消息队列已经存在，当前进程没有权限访问）、EEXIST（方法中指定的key值消息队列已经存在，当msgflg指定为IPC_CREAT|IPC_EXCL）、ENOMEN（建立新的消息队列，系统内存不足）以及ENOSPC（创建新消息队列，但已经达到系统最大限制）。</p>
+
+<p>下面将会通过一个简单的实例程序，使用系统提供的创建消息队列的方法，采用C++封装实现消息队列的创建操作，并且通过创建相应的消息队列介绍系统提供的IPC操作工具，在操作系统中IPC资源的相关操作使用情况，该实例代码编辑如下所示。 <br>
+a.准备实例 <br>
+打开UE工具，创建新的空文件并且另存为chapter2401.cpp。该代码文件随后会同makefile文件一起通过FTP工具传输至Linux服务器端，客户端通过scrt工具访问操作。程序代码文件编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-comment">/**</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 实例chapter2401</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 源文件chapter2401.cpp</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 消息队列创建实例</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;errno.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/msg.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;fcntl.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div><div class="hljs-line"><span class="hljs-comment">//创建消息队列</span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">creatMsgQueue</span><span class="hljs-params">(<span class="hljs-keyword">int</span> key,<span class="hljs-keyword">int</span> flag,<span class="hljs-keyword">int</span> msgid)</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    msgid = msgget(key,flag);                               <span class="hljs-comment">//调用msgget创建对应消息队列</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(msgid == <span class="hljs-number">-1</span>)                                     <span class="hljs-comment">//判断对应的返回值</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-keyword">if</span>(errno == EACCES)                         <span class="hljs-comment">//打开不成功，判断是否拥有相应权限</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"current process have not rights!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">        <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(errno == EEXIST)                            <span class="hljs-comment">//判断是否已经存在相同的消息队列</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"have same msg Queue!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">        <span class="hljs-keyword">else</span>
+</div><div class="hljs-line">            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> key,flag,msgid; <span class="hljs-comment">//定义三个变量表示key值、标志值与描述符</span>
+</div><div class="hljs-line">    key = <span class="hljs-number">0x00001010</span>;   <span class="hljs-comment">//指定消息队列的key值</span>
+</div><div class="hljs-line">    flag = IPC_CREAT|IPC_EXCL|<span class="hljs-number">00666</span>;  <span class="hljs-comment">//指定创建消息队列的创建标志值</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(creatMsgQueue(key,flag,msgid)) <span class="hljs-comment">//调用创建消息队列的方法，判断是否成功</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"creat msg Queue success!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;<span class="hljs-comment">//如果创建成功，则打印提示信息</span>
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"msg Queue msgid:"</span>&lt;&lt;msgid&lt;&lt;<span class="hljs-built_in">endl</span>;<span class="hljs-comment">//输出相应的消息队列描述符值</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">else</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"creat msg Queue fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;<span class="hljs-comment">//否则提示创建不成功信息</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>b.编辑Makefile <br>
+Linux下需要编译的源文件为chapter2401.cpp，相关makefile工程文件编译命令编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs avrasm"><div class="hljs-line">OBJECTS=chapter2401.o
+</div><div class="hljs-line">CC=g++
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-symbol">chapter2401:</span> $(OBJECTS)
+</div><div class="hljs-line">    $(CC) $(OBJECTS) -g -o chapter2401
+</div><div class="hljs-line"><span class="hljs-symbol">clean:</span>
+</div><div class="hljs-line">    rm -f chapter2401 core $(OBJECTS)
+</div><div class="hljs-line"><span class="hljs-symbol">submit:</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">cp</span> -f -r chapter2401 ../bin
+</div></code></pre>
+
+<p>上述makefile文件套用前面的模板格式，主要替换了代码文件、程序编译中间文件、可执行程序等。在编译命令部分-g选项的加入，表明程序编译同时加入了可调式信息。 <br>
+c.编译运行程序 <br>
+当前shell下执行make命令，生成可执行程序文件，随后通过makesubmit命令提交程序文件至本实例bin目录，通过cd命令定位至bin目录，执行该程序文件运行结果如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs elixir"><div class="hljs-line">[developer<span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>make
+</div><div class="hljs-line">g++    -c -o chapter2401.o chapter2401.cpp
+</div><div class="hljs-line">g++ chapter2401.o -g -o chapter2401
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>make submit
+</div><div class="hljs-line">cp -f -r chapter2401 ../bin
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>cd ../bin
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> bin]<span class="hljs-variable">$ </span>./chapter2401
+</div><div class="hljs-line">creat msg Queue success!
+</div><div class="hljs-line">msg Queue <span class="hljs-symbol">msgid:</span><span class="hljs-number">5652468</span>
+</div></code></pre>
+
+<p>d.程序剖析 <br>
+本实例主要演示使用系统提供的创建消息队列方法，创建指定key值得消息队列。实例主要将消息队列方法实现了简单的封装，主程序中直接通过调用封装好的方法，根据指定的消息队列相关信息创建相应的队列。消息队列创建中，第一个参数key值通常在实际应用中可以通过配置文件指定固定值，用于主机应用统一管理相应的IPC资源。</p>
+
+<p>对于进程通信手段中的key值，Linux系统提供了另一种系统调用方法ftok，该方法主要用于为消息队列、共享内存等IPC资源指定一个固定ID值，用于表示相应IPC资源的key值。该方法原型如下。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">key_t</span> ftok(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *pathname,<span class="hljs-keyword">int</span> proj_id);
+</div></code></pre>
+
+<p>该方法中第一个参数pathname用于指定存在的文件名，其中proj_id表示其中的子序号，为一个整型数，开发者可以直接指定，两个参数传入该方法，ftok内部实际将指定存在的文件的索引号与子序号合并在一起形成相应的key值，其中key通常为16进制表示，并且返回表示消息队列创建的key值。</p>
+
+<p>本实例中采用了实际应用系统中常见的key指定方法，直接指定相应的key值为0x00001010。初学者可以修改实例使用ftok方法尝试着创建消息队列，学习该方法的基本使用操作。本实例封装创建消息队列的方法为creatMsgQueue，该方法有三个参数，前两个参数为消息队列的key值、指定创建标志以及相应的消息队列的msgid，其中参数msgid为创建消息队列返回的描述符。</p>
+
+<p>封装方法creatMsgQueue内部直接调用相应的创建方法msgget，传入需要建立的消息队列的key值与创建标志值。随后将得到的msgid进行判断，如果获取非-1的返回值，那么说明消息队列创建已经成功，一旦返回值为-1那么会判断几个可能出错的标志值，从而定位错误。</p>
+
+<p>本实例主程序中首先定义三个整型变量，其中key表示消息队列的键值，flag表示对应的消息队列创建标志，msgid则表示创建消息队列后返回的描述符。随后初始化key与flag值，其中flag中除了指定IPC_CREAT|IPC_EXCL之外，指定该消息队列的访问权限为00666即为可读写，与文件处理权限值相同。之后在if控制结构中调用创建消息队列的方法，判断该方法的返回值来验证创建工作是否成功。</p>
+
+<p>如果创建成功除了打印输出提示信息外，还将会打印输出该消息队列的描述符，该描述符是后续操作该消息队列的凭证。当程序运行后，通常可以通过系统提供的ipcs工具，来查询系统中相应IPC资源。该工具直接在当前shell下执行ipcs命令，当不指定任何命令选项时展示所有系统IPC资源如下。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs lsl"><div class="hljs-line">[developer@localhost msgqueue]$ ipcs
+</div><div class="hljs-line">------ Shared Memory Segments --------
+</div><div class="hljs-line"><span class="hljs-type">key</span>        shmid      owner      perms      bytes      nattch     status
+</div><div class="hljs-line"><span class="hljs-number">0x00000000</span> <span class="hljs-number">0</span>          developer <span class="hljs-number">777</span>        <span class="hljs-number">393216</span>     <span class="hljs-number">2</span>          dest
+</div><div class="hljs-line"><span class="hljs-number">0x00000000</span> <span class="hljs-number">32769</span>      root      <span class="hljs-number">644</span>        <span class="hljs-number">106496</span>     <span class="hljs-number">2</span>          dest
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">------ Semaphore Arrays --------
+</div><div class="hljs-line"><span class="hljs-type">key</span>        semid      owner      perms      nsems
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">------ Message Queues --------
+</div><div class="hljs-line"><span class="hljs-type">key</span>        msqid      owner      perms      used-bytes   messages
+</div><div class="hljs-line"><span class="hljs-number">0x61090004</span> <span class="hljs-number">131072</span>     developer  <span class="hljs-number">666</span>        <span class="hljs-number">0</span>            <span class="hljs-number">0</span>
+</div><div class="hljs-line"><span class="hljs-number">0x00001010</span> <span class="hljs-number">163842</span>     developer  <span class="hljs-number">666</span>        <span class="hljs-number">0</span>            <span class="hljs-number">0</span>
+</div></code></pre>
+
+<p>该命令不带任何参与时，展示系统中所有类型的IPC资源情况，其中“Shared Memory Segments”为系统中共享内存资源创建情况，而“Semaphore Arrays”为信号量资源创建以及“Message Queues”用于表示相应消息队列创建信息。对于消息队列资源来讲，可以通过指定命令选项为-q，操作如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs lsl"><div class="hljs-line">[developer@localhost msgqueue]$ ipcs -q
+</div><div class="hljs-line">------ Message Queues --------
+</div><div class="hljs-line"><span class="hljs-type">key</span>        msqid      owner      perms      used-bytes   messages
+</div><div class="hljs-line"><span class="hljs-number">0x61090004</span> <span class="hljs-number">131072</span>     developer  <span class="hljs-number">666</span>        <span class="hljs-number">0</span>            <span class="hljs-number">0</span>
+</div><div class="hljs-line"><span class="hljs-number">0x00001010</span> <span class="hljs-number">163842</span>     developer  <span class="hljs-number">666</span>        <span class="hljs-number">0</span>            <span class="hljs-number">0</span>
+</div></code></pre>
+
+<p>从中可以看出，key值为0x00001010消息队列已经创建成功，该消息队列对应的id为163842，所属用户为developer，并且指定的可读写权限值为666。而消息队列资源的清除可以通过ipcrm命令来实现，删除时添加选项为-Q后跟对应key值，添加选项-q则后续跟对应的msgid值，删除操作如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs lsl"><div class="hljs-line">[developer@localhost msgqueue]$ ipcrm -Q <span class="hljs-number">0x00001010</span>
+</div><div class="hljs-line">[developer@localhost msgqueue]$ ipcs -q
+</div><div class="hljs-line">------ Message Queues --------
+</div><div class="hljs-line"><span class="hljs-type">key</span>        msqid      owner      perms      used-bytes   messages
+</div><div class="hljs-line"><span class="hljs-number">0x61090004</span> <span class="hljs-number">131072</span>     developer  <span class="hljs-number">666</span>        <span class="hljs-number">0</span>            <span class="hljs-number">0</span>
+</div></code></pre>
+
+<p>4.消息队列操作 <br>
+Linux系统下应用程序中当对应的消息队列创建完毕之后，自然需要通信的进程可以通过操作该消息队列，通过其发送和接受相应的消息数据来实现进程通信。消息队列的数据操作主要包括两个方面，即消息队列的数据发送和接受，下面将会讲述在消息队列创建之后，应用中如何操作使用其发送与接受数据方法，来实现相应消息数据通信。</p>
+
+<p>1）消息队列接收数据</p>
+
+<p>对于已经按照要求创建成功的消息队列，应用程序需要根据获取到消息队列的操作权限来读写相应的队列。既然消息队列在内核可以看作的一个消息的链表结构，那么在消息队列中对于传输数据来看，消息队列中发送、接受的数据都可以看作是一个固定结构定义的消息。该消息可以类为前面文件章节介绍的记录，实际就是采用结构体定义来指定相应消息的结构，其定义可以如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs abnf"><div class="hljs-line">struct msgbuf
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    long mtype<span class="hljs-comment">;</span>
+</div><div class="hljs-line">    char mtext[n]<span class="hljs-comment">;</span>
+</div><div class="hljs-line">}<span class="hljs-comment">;</span>
+</div></code></pre>
+
+<p>从本质上看，消息队列中传输的消息就是一串字符串或者字节流，上述结构体定义中成员mtype用于对系统中传输的消息类型进行定义，指明传输消息的类型；而成员mtext为一个字符数据，用于存放具体的消息内容，大小可以根据需要自己设定。</p>
+
+<p>Linux系统下提供了操作消息队列对应的读写方法，分别用于进程通信中消息队列的消息接收与发送操作。本小节主要介绍消息队列提供的接受操作对应的系统调用方法，该方法提供的原型如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/msg.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">ssize_t</span>  msgrcv(<span class="hljs-keyword">int</span> msgid, <span class="hljs-keyword">struct</span>  msgbuf *msgp,<span class="hljs-keyword">size_t</span>  msgsz, <span class="hljs-keyword">long</span>  msgtyp, <span class="hljs-keyword">int</span>  msgflg);
+</div></code></pre>
+
+<p>该方法用于从指定的消息队列中读取接受对应的消息，存放到指定的消息结构中的功能。该方法共有五个不同的参数，第一个参数msgid为创建对应的消息队列的描述符，参与通信的应用进程就是根据获取到的相应消息队列描述符来操作消息队列的；第二个参数为msgbuf结构体指针，用于指向一个存放消息的内存空间，存放接受到的消息数据。</p>
+
+<p>方法的第三个参数msgsz是指定对应消息结构体中的mtext的长度，即消息队列中传输消息数据的长度；第四个参数msgtyp则为指定消息队列结构中的消息类型，即进程通信中请求读取的消息类型；最后参数msgflg为消息队列读的标志值，该标志值通常用于设定读取消息的一些操作条件。</p>
+
+<p>参数msgflg对应的标志值通常有三种，第一个为IPC_NOWAIT表示没有读取到消息队列中指定的消息类型数据，那么该方法调用后将会立即返回；第二个为IPC_EXCEPT通常与msgtyp参数配合使用，当设定需要读取的消息类型值大于0时，指定当前进程读取消息队列中第一个非msgtyp指定类型的消息；第三个为IPC_NOERROR用于消息队列中消息截断处理，当队列中的消息数据长度大于设定消息长度msgsz参数时，将会按照msgsz参数设定的消息固定长度来截取获得。</p>
+
+<p>该系统调用方法，一旦读取指定类型消息成功，那么将会返回读取消息长度字节数，否则将会返回整型值-1，相应的错误标志会写入errno中，通常出错对应的标志值可以为如下几种，比如EACCES表示调用进程没有读取消息队列权限，并且没有CAP_IPC_OWNER权限；EAGAIN表示消息队列为空，并且当前msgflg并没有指定为IPC_NOWAIT值；EFAULT表明msgp指向的空间不可访问等。</p>
+
+<p>上述介绍完消息队列接受数据的方法之后，下面将会通过一个C++封装该操作的方法，简单说明消息队列读取操作在实际应用中的使用情况，在后续读写实例中会采用一个完整的消息队列数据简单通信实例来验证封装的操作方法使用情况，该方法操作封装代码如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-comment">//接收消息</span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">get</span><span class="hljs-params">(<span class="hljs-keyword">int</span> msgid,msgdata&amp; msg, <span class="hljs-keyword">int</span> msglen, <span class="hljs-keyword">int</span> flag)</span> </span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (msgrcv(msgid, &amp;msg, msglen, <span class="hljs-number">1</span>, <span class="hljs-number">0</span>|flag) == <span class="hljs-number">-1</span>)<span class="hljs-comment">//调用接受消息方法进行判断</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-keyword">if</span> (errno == ENOMSG)                <span class="hljs-comment">//如果请求的类型消息不存在</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-keyword">return</span> <span class="hljs-number">-1</span>;                      <span class="hljs-comment">//直接返回-1</span>
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">        <span class="hljs-keyword">else</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"recv msg fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;   <span class="hljs-comment">//否则提示发送失败</span>
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>上述方法中基本采用了原系统调用方法的参数接口，方法内部实现了调用系统方法并进行相关返回值判断的过程。其中消息接收的类型指定为1，在实际应用中根据需要可以设定并作修改。方法内部调用系统方法之后，针对请求的类型消息不存在的情况作了判断，通常可能由于设置消息类型值得不一致，从而可能接受不到数据这种常见情况处理，并且标志flag采用与0或运算处理，如果不需要设定flag则默认指定为0。 <br>
+2）消息队列发送数据 <br>
+Linux中对于消息队列数据发送提供了相应的系统调用方法，该方法主要用于向指定的消息队列写入相应消息数据，该消息数据在消息队列中等待其对端通信进程读取，该方法原型定义如下所示。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/msg.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">msgsnd</span><span class="hljs-params">(<span class="hljs-keyword">int</span> msgid, <span class="hljs-keyword">struct</span> msgbuf *msgp, <span class="hljs-keyword">size_t</span> msgsz, <span class="hljs-keyword">int</span> msgflg)</span></span>;
+</div></code></pre>
+
+<p>本方法向参数msgid表示的描述符对应的消息队列发送相应的消息数据，该方法主要拥有四个参数。第一个参数msgid表示对应消息队列的描述符；第二个参数为消息结构体对应用的指针msgp，该消息结构为msgbuf前面在消息接收方法处已经明确讲述过；第三个参数为发送消息指定的数据内容大小，最后一个参数为msgflg标志值与接受方法相同。</p>
+
+<p>需要注意的是msgflg标志值为IPC_NOWAIT，表明发送的消息队列中没有足够的空间来存放发送的消息数据，表明发送数据的方法是否需要等待。该方法调用成功后将会返回整型值0，否则会返回-1值，对应错误标志会置入errno中，供诊断使用，同样针对发送消息对应的错误标志值可以为EACCES调用进程对消息队列没有写权限，同时没有CAP_IPC_OWNER权限；EAGAIN表明消息队列的msg_qbytes的限制与指定了IPC_NOWAIT标志，消息不能被发送等。</p>
+
+<p>下面将会采用C++封装消息队列发送消息的方法，简单说明该方法在实际应用中的使用情况，如下。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-comment">//发送消息</span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">put</span><span class="hljs-params">(<span class="hljs-keyword">int</span> msgid,msgdata&amp; msg, <span class="hljs-keyword">int</span> msglen, <span class="hljs-keyword">int</span> flag)</span> </span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (msgsnd(msgid, &amp;msg, msglen, <span class="hljs-number">0</span>|flag) == <span class="hljs-number">-1</span>) <span class="hljs-comment">//调用消息发送方法，并作判断</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-keyword">if</span> (errno == EAGAIN)            <span class="hljs-comment">//消息不能被发送直接返回-1</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-keyword">return</span> <span class="hljs-number">-1</span>;
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">        <span class="hljs-keyword">else</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"send msg fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;   <span class="hljs-comment">//否则直接提示信息</span>
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>发送消息方法的封装，主要也采用了原来系统调用的参数接口，方法调用之后内部针对消息不能被发送的情形作了简单的判断处理，发送方法的标志值依然采用和接受方法同样的处理，在不指定标志值的情况下，默认为0。 <br>
+3）消息队列读写数据实例</p>
+
+<p>通过前面介绍Linux下消息队列创建、读写操作之后，下面将会通过一个完整的两个进程通过消息队列通信的实例，来演示消息队列在应用程序中的使用操作情况，该实例代码编辑如下所示。</p>
+
+<p>a.准备实例</p>
+
+<p>打开UE工具，创建新的空文件并且另存为chapter2402_01.cpp、chapter2402_02.cpp。该代码文件随后会同makefile文件一起通过FTP工具传输至Linux服务器端，客户端通过scrt工具访问操作。程序代码文件编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-comment">/**</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 实例chapter2402</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 源文件chapter2402_01.cpp、chapter2402_02.cpp</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 消息队列读写数据实例</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">//消息队列服务端chapter2402_01.cpp</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;errno.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/msg.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;unistd.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/stat.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;fcntl.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> BUFFER 512</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">//消息队列结构体</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-keyword">struct</span> msgdata
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">{
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         longmtype;                                                                                                    <span class="hljs-comment">//消息类型</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         charbuffer[BUFFER+<span class="hljs-number">1</span>];                                                                              <span class="hljs-comment">//消息数据缓冲区</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">};
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">//创建消息队列</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">create</span><span class="hljs-params">(<span class="hljs-keyword">int</span> key)</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         intmsgid;                                                                                                        <span class="hljs-comment">//定义相应的消息队列描述符变量</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-keyword">if</span>((msgid= msgget(key, IPC_CREAT | IPC_EXCL | <span class="hljs-number">0600</span>)) == <span class="hljs-number">-1</span>)     <span class="hljs-comment">//调用创建消息队列方法，返回描述符</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"createmsg queue fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;                                           <span class="hljs-comment">//如果创建不成功则提示</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         returnmsgid;                                                                                                 <span class="hljs-comment">//返回相应的消息队列描述符</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">//发送消息</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">put</span><span class="hljs-params">(<span class="hljs-keyword">int</span> msgid,msgdata&amp; msg, <span class="hljs-keyword">int</span> msglen, intflag)</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-keyword">if</span>(msgsnd(msgid, &amp;msg, msglen, <span class="hljs-number">0</span>|flag) == <span class="hljs-number">-1</span>)                                   <span class="hljs-comment">//调用消息发送方法，并作判断</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-keyword">if</span>(errno == EAGAIN)                                                                          <span class="hljs-comment">//消息不能被发送直接返回-1</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                            <span class="hljs-keyword">return</span><span class="hljs-number">-1</span>;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-keyword">else</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"sendmsg fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;                                                <span class="hljs-comment">//否则直接提示信息</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         return0;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">//接受消息</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">get</span><span class="hljs-params">(<span class="hljs-keyword">int</span> msgid,msgdata&amp; msg, <span class="hljs-keyword">int</span> msglen, intflag)</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-keyword">if</span>(msgrcv(msgid, &amp;msg, msglen, <span class="hljs-number">1</span>, <span class="hljs-number">0</span>|flag) == <span class="hljs-number">-1</span>)                                <span class="hljs-comment">//调用接受消息方法进行判断</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-keyword">if</span>(errno == ENOMSG)                                                                       <span class="hljs-comment">//如果请求的类型消息不存在</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                            <span class="hljs-keyword">return</span><span class="hljs-number">-1</span>;                                                                                      <span class="hljs-comment">//直接返回-1</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-keyword">else</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"recvmsg fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;                                                  <span class="hljs-comment">//否则提示发送失败</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         return0;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         structmsgdata msg;                                                                                     <span class="hljs-comment">//定义消息结构体对象</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         key_tkey;                                                                                                       <span class="hljs-comment">//定义对应的key值变量</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-keyword">int</span> msgid;                                                                                                        <span class="hljs-comment">//定义相应消息队列描述符变量</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         key =<span class="hljs-number">0x00001010</span>;                                                                                       <span class="hljs-comment">//初始化消息队列key值</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         msgid= create(key);                                                                                    <span class="hljs-comment">//调用创建消息队列方法</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-keyword">while</span>(<span class="hljs-number">1</span>)
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   intret = get(msgid, msg, BUFFER, <span class="hljs-number">0</span>);                                             <span class="hljs-comment">//循环体中调用get方法接受消息</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-keyword">if</span>(ret== <span class="hljs-number">0</span>)                                                                                                       <span class="hljs-comment">//判断方法返回值是否正常</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"recevievdata:"</span>&lt;&lt;msg.buffer&lt;&lt;<span class="hljs-built_in">endl</span>;                        <span class="hljs-comment">//如果正常打印相应的接受数据</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   msg.mtype=<span class="hljs-number">2</span>;                                                                                      <span class="hljs-comment">//设定消息类型为2</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-keyword">if</span>(put(msgid,msg, BUFFER, <span class="hljs-number">0</span>) == <span class="hljs-number">0</span>)                                                        <span class="hljs-comment">//将接受的消息发送出去</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"sendmsg success!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         return0;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">//消息队列客户端chapter2402_02.cpp</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;errno.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/msg.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;fcntl.h&gt;</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> BUFFER 512</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">//消息结构体定义</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-keyword">struct</span> msgdata
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">{
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         longmtype;                                                                                           <span class="hljs-comment">//消息类型</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         charbuffer[BUFFER+<span class="hljs-number">1</span>];                                                                     <span class="hljs-comment">//消息数据</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">};
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">//打开或创建消息队列方法定义</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">create</span><span class="hljs-params">(<span class="hljs-keyword">int</span> key)</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         intmsgid;                                                                                              <span class="hljs-comment">//定义消息队列描述符</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-keyword">if</span>((msgid= msgget(key, <span class="hljs-number">0600</span>)) == <span class="hljs-number">-1</span>)                                           <span class="hljs-comment">//调用打开或创建方法并判断返回值</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"createmsg queue fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;                                 <span class="hljs-comment">//如果为-1则提示创建不成功</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         returnmsgid;                                                                                        <span class="hljs-comment">//返回相应的消息队列描述符</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">//发送消息方法定义</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">put</span><span class="hljs-params">(<span class="hljs-keyword">int</span> msgid,msgdata&amp; msg, <span class="hljs-keyword">int</span> msglen, intflag)</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-keyword">if</span>(msgsnd(msgid, &amp;msg, msglen, <span class="hljs-number">0</span>|flag) == <span class="hljs-number">-1</span>)                         <span class="hljs-comment">//调用发送消息方法，判断返回值</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-keyword">if</span>(errno == EAGAIN)                                                                <span class="hljs-comment">//消息不能被发送</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                            <span class="hljs-keyword">return</span><span class="hljs-number">-1</span>;                                                                             <span class="hljs-comment">//直接返回-1</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-keyword">else</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"sendmsg fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;                                       <span class="hljs-comment">//否则打印发送出错的提示信息</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         return0;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">//获取消息方法定义</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">get</span><span class="hljs-params">(<span class="hljs-keyword">int</span> msgid,msgdata&amp; msg, <span class="hljs-keyword">int</span> msglen, intflag)</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-keyword">if</span>(msgrcv(msgid, &amp;msg, msglen, <span class="hljs-number">2</span>, <span class="hljs-number">0</span>|flag) == <span class="hljs-number">-1</span>)                      <span class="hljs-comment">//调用接受消息方法，判断返回值</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-keyword">if</span>(errno == ENOMSG)                                                              <span class="hljs-comment">//如果请求的类型消息不存在</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                            <span class="hljs-keyword">return</span><span class="hljs-number">-1</span>;                                                                             <span class="hljs-comment">//直接返回-1</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-keyword">else</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"recvmsg fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;                                        <span class="hljs-comment">//否则提示接受消息失败</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         return0;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">main</span><span class="hljs-params">(<span class="hljs-keyword">int</span> argc,<span class="hljs-keyword">char</span> **argv)</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         structmsgdata msg;                                                                           <span class="hljs-comment">//定义消息结构体对象</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         key_tkey;                                                                                              <span class="hljs-comment">//定义相应key值变量</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         intmsgid;                                                                                              <span class="hljs-comment">//定义消息队列描述符变量</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         key =<span class="hljs-number">0x00001010</span>;                                                                             <span class="hljs-comment">//初始化相应的key值</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-keyword">if</span>(argc!=<span class="hljs-number">2</span>)                                                                                                       <span class="hljs-comment">//如果程序执行没有加指定选项参数</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         {
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"Usage:data"</span>&lt;&lt;argv[<span class="hljs-number">0</span>]&lt;&lt;<span class="hljs-built_in">endl</span>;                                   <span class="hljs-comment">//提示信息</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">                   <span class="hljs-built_in">exit</span>(<span class="hljs-number">1</span>);                                                                                          <span class="hljs-comment">//退出进程</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         }
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         msgid= create(key);                                                                           <span class="hljs-comment">//调用打开或创建方法打开指定消息队列</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         msg.mtype=<span class="hljs-number">1</span>;                                                                                      <span class="hljs-comment">//设定消息类型</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-built_in">strncpy</span>(msg.buffer,argv[<span class="hljs-number">1</span>],BUFFER);                                             <span class="hljs-comment">//将参数项数据拷贝至消息对象缓冲区</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         put(msgid,msg,BUFFER,<span class="hljs-number">0</span>);                                                              <span class="hljs-comment">//发送消息数据</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-built_in">memset</span>(&amp;msg,<span class="hljs-number">0</span>,BUFFER);                                                               <span class="hljs-comment">//清空并初始化消息对象</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         get(msgid,msg,BUFFER,<span class="hljs-number">0</span>);                                                              <span class="hljs-comment">//接受消息数据</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"Clientreceive:"</span>&lt;&lt;msg.buffer&lt;&lt;<span class="hljs-built_in">endl</span>;                                 <span class="hljs-comment">//打印接受到的消息数据</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">         return0;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>b.执行编译命令 <br>
+Linux下需要编译的源文件程序分别为服务与客户端两个部分，主要源文件为chapter2402_01.cpp与chapter2402_02.cpp两个，相关g++编译命令如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs elixir"><div class="hljs-line">[billing<span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>g++ chapter2402_01.cpp -o chapter2402_01
+</div><div class="hljs-line">[billing<span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>g++ chapter2402_02.cpp -o chapter2402_02
+</div></code></pre>
+
+<p>c.编译运行程序 <br>
+当前shell下执行上述g++编译命令，生成相应的可执行程序，首先执行服务端程序运行如下。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs gams"><div class="hljs-line">[developer@localhost msgqueue]<span class="hljs-symbol">$</span> ./ chapter2402_01
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-title">prepare</span></span> data...
+</div></code></pre>
+
+<p>服务端启动后将会一直在等待客户端通过消息队列发送相应的消息数据，此时客户端启动如下。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs elixir"><div class="hljs-line">[developer<span class="hljs-variable">@localhost</span> msgqueue]<span class="hljs-variable">$ </span>./ chapter2402_02 hello
+</div><div class="hljs-line">[developer<span class="hljs-variable">@localhost</span> msgqueue]<span class="hljs-variable">$ </span>./ chapter2402_01
+</div><div class="hljs-line">prepare data...
+</div><div class="hljs-line">receviev <span class="hljs-symbol">data:</span>hello
+</div><div class="hljs-line">send msg success!
+</div><div class="hljs-line">[developer<span class="hljs-variable">@localhost</span> msgqueue]<span class="hljs-variable">$ </span>./ chapter2402_02 hello
+</div><div class="hljs-line">Client <span class="hljs-symbol">receive:</span>hello
+</div></code></pre>
+
+<p>d.分析程序 <br>
+本实例主要演示一个基本的客户/服务端进程采用消息队列进行双向通信的实际应用。首先来看程序运行的结果，服务端进程启动创建相应的消息队列之后，进入等待从消息队列接受数据状态。而客户端进程启动同时，加上需要发送的数据作为相应的参数选项，程序运行之后即通过打开指定的消息队列，发送数据给服务端进程，随后服务端接受到相应消息数据之后，以相同的数据内容发送给客户端，客户端接收后打印输出。</p>
+
+<p>本实例主要分两个应用程序部分，服务端程序主要包含消息队列三个基本方法的封装实现，分别为创建消息队列create、发送消息方法put与接受消息方法get。三个方法的基本封装都在前面详细分析讲述过，下面直接分析服务端的主程序。</p>
+
+<p>服务端主程序中首先需要定义消息结构对象，消息结构体msgdata作为全局结构在前面已经定义，随后定义key值变量以及消息队列描述符变量，并且初始化key值为指定0x00001010。调用创建消息队列的方法，根据传入的key值来创建相应的消息队列资源，返回值初始化相应的消息队列描述符变量。</p>
+
+<p>打印提示服务端进入等待接受数据状态，while结构中条件一直为真，即进入循环处理状态。循环体内首先调用get方法从指定描述符的消息队列读取数据，返回值ret进行判断，如果接受数据成功则打印数据接收的数据，随后设定消息类型值为2，调用put方法将接受到的消息数据原封不动的发送给客户端，至此服务端在不断的作上述循环操作。</p>
+
+<p>对于客户端应用程序，同样打开消息队列以及相关操作都通过封装好的方法来使用，同样包括三个主要方法。主程序中定义消息结构体对象，对应的消息队列key变量，消息队列描述符变量。并且指定开打的消息队列key值与服务端相同，保证采用同一个消息队列进行通信。客户端不需要进行循环处理，从程序运行时指定的参数为发送的数据，首先判断程序执行的时候有没有指定相应发送参数，如果没有指定则提示并退出程序。</p>
+
+<p>一旦指定发送数据之后，首先调用create方法根据传入的key值打开相应的消息队列，随后设置发送消息队列中消息类型，将参数指定的数据拷贝到消息结构体对应的消息数据数组中。调用发送消息队列数据的方法put，根据返回的消息队列描述符，将指定消息数据发送到对端。随后清空并初始化对应的消息存放空间，调用接受消息数据方法get，从消息队列中读取数据并打印输出。</p>
+
+<p>需要注意的是消息队列通信两端的进程，在设定消息类型时要对比一致，即服务端消息队列发送端与客户端接收端消息类型需要设置一致，而客户端消息队列的接收端消息类型与服务端的发送端类型要一致，否则通信会产生错误。</p>
+
+<p>5.消息队列控制 <br>
+对于IPC这类资源操作，系统都提供了获取并操作其基本属性的方法，对于消息队列同样存在获取相应系统存在的资源信息以及修改其基本属性等操作。</p>
+
+<p>在Linux系统中，维持着一个与系统中相应消息队列资源相对应的状态结构msqid_ds，该结构体在每次定义新的消息队列都会产生相应的实例与之相对应，系统内核中负责管理这些资源状态信息，并通过其管理对应的消息队列资源。该结构体在内核中定义情况如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line">Struct msqid_ds
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span> ipc_perm msg_perm;       <span class="hljs-comment">//消息队列基本权限</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span> msg *msg_first;          <span class="hljs-comment">//指向消息队列第一个消息</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span> msg *msg_last;           <span class="hljs-comment">//指向消息队列最后一个消息</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">_kernel_time_t</span> msg_stime;       <span class="hljs-comment">//消息队列最后一次发送时间</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">_kernel_time_t</span> msg_rtime;       <span class="hljs-comment">//消息队列最后一次接受时间</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">_kernel_time_t</span> msg_ctime;       <span class="hljs-comment">//消息队列最后一次修改时间</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span> wait_queue *wwait;           <span class="hljs-comment">//等待向消息队列中写的进程wwait</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span> wait_queue *rwait;           <span class="hljs-comment">//等待从消息队列中读的进程rwait</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> msg_cbytes;      <span class="hljs-comment">//消息队列当前字节数</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> msg_qnum;        <span class="hljs-comment">//消息队列消息数</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">unsigned</span> <span class="hljs-keyword">short</span> msg_qbytes;      <span class="hljs-comment">//消息队列最大容量，字节数</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">_kernel_ipc_pid_t</span>  msg_lspid;       <span class="hljs-comment">//最后一次向消息队列发送消息的进程id</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">_kernel_ipc_pid_t</span>  msg_lrpid;       <span class="hljs-comment">//最后一次从消息队列接受消息的进程id</span>
+</div><div class="hljs-line">};
+</div></code></pre>
+
+<p>对于Linux内核来讲，通过一个指定的向量表msgque来管理相应的消息结队列，每当创建新的消息队列之后，都会产生一个新的msqid_ds数据结构并分配相应的内存，同时插入到对应的向量表中，供实际处理时使用。 <br>
+当消息队列创建成功之后，进程向消息队列写入消息数据，首先会与msqid_ds结构体中的ipc_perm数据结构中的成员值进行比较，如果获取相应的操作权限，则内核将会从进程地址空间拷贝相应的msg数据结构中，该结构放在消息队列的尾部。</p>
+
+<p>而进程读取相应的消息时将会是个相似的过程，同样首先需要获取操作的权限，然后读取进程会选择从消息队列中读取第一条消息，该消息需要指定相应的类型。如果没有读取到相同符合类型的消息，那么读进程将会加入等待行列，当一个新的消息写入的时候，该进程会被唤醒。 <br>
+1）消息队列控制系统API</p>
+
+<p>Linux系统下针对消息队列的控制操作，提供了一系列的命令来执行相应的操作功能。系统专门提供了消息队列控制操作的调用方法，该方法原型定义如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs autoit"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/msg.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-built_in">int</span> msgctl(<span class="hljs-built_in">int</span> msgid,<span class="hljs-built_in">int</span> cmd,struct msqid_ds *buf)<span class="hljs-comment">;</span>
+</div></code></pre>
+
+<p>该方法主要通过cmd参数来指定相应的操作命令来执行相应的控制功能。系统调用主要有三个参数，第一个参数是需要控制操作的消息队列描述符msgid；第二个参数cmd为指定执行操作的命令参数，该参数主要包含三个标志值；第三个参数为指向消息队列状态信息结构体指针buf。</p>
+
+<p>第一个参数msgid不需要过多的讲述了，消息队列的描述符，操作相应消息队列所必须的。第二个cmd为命令参数，主要包含三种基本操作标志值分别为IPC_STAT、IPC_SET以及IPC_RMID。参数命令的值分别表示了不同操作的类型，具体说明如下所示。</p>
+
+<p>命令IPC_STAT表示指定控制方法获取消息队列的属性，将获取属性的信息存放在相应的buf指向的结构体中；而命令IPC_SET用于设定消息队列的属性值，将需要设定的属性值存放在buf指向的结构体中，用于具体属性值设置。命令IPC_RMID则为删除指定msgid的消息队列。 <br>
+2）消息队列控制实例</p>
+
+<p>该操作方法在实际应用中将会配合消息队列的其它操作应用，作为相应的辅助操作手段，下面将会封装实现根据控制方法清除系统中指定key值得消息队列，代码实例编辑如下所示。</p>
+
+<p>a.准备实例</p>
+
+<p>打开UE工具，创建新的空文件并且另存为chapter2403.cpp。该代码文件随后会同makefile文件一起通过FTP工具传输至Linux服务器端，客户端通过scrt工具访问操作。程序代码文件编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-comment">/**</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 实例chapter2403</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 源文件chapter2403.cpp</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 消息队列控制实例</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;errno.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/msg.h&gt;</span>    </span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/stat.h&gt;</span>  </span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;fcntl.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div><div class="hljs-line"><span class="hljs-comment">//删除消息队列方法定义</span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">remove</span><span class="hljs-params">(<span class="hljs-keyword">int</span> key)</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> msgid;                                          <span class="hljs-comment">//消息队列描述符变量</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> ((msgid = msgget(key, <span class="hljs-number">0</span>)) != <span class="hljs-number">-1</span>)                         <span class="hljs-comment">//调用打开或创建方法判断其返回值</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        msgctl(msgid, IPC_RMID, (<span class="hljs-keyword">struct</span> msqid_ds*)<span class="hljs-number">0</span>);       <span class="hljs-comment">//调用消息队列控制方法，删除队列</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;                                    <span class="hljs-comment">//返回true</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">else</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;                                   <span class="hljs-comment">//否则返回false</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">//判断指定消息队列是否存在</span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">isExist</span><span class="hljs-params">(<span class="hljs-keyword">int</span> key)</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> msgid;                                          <span class="hljs-comment">//消息队列描述符变量</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> ((msgid = msgget(key, IPC_CREAT | IPC_EXCL)) == <span class="hljs-number">-1</span>)  <span class="hljs-comment">//调用打开或创建方法判断其返回值</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-number">1</span>;                                       <span class="hljs-comment">//如果不存在则返回真</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    msgctl(msgid, IPC_RMID, (<span class="hljs-keyword">struct</span> msqid_ds*)<span class="hljs-number">0</span>);           <span class="hljs-comment">//否则删除之</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">key_t</span> key;                                          <span class="hljs-comment">//定义key变量</span>
+</div><div class="hljs-line">    key = <span class="hljs-number">0x00001010</span>;                                   <span class="hljs-comment">//初始化key值</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(remove(key))                                     <span class="hljs-comment">//调用删除消息队列方法</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"remove msg queue success!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">else</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"remove fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(isExist(key))                                        <span class="hljs-comment">//判断指定队列是否存在</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"msg queue exist!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>b.编辑Makefile <br>
+Linux平台下需要编译源文件为chapter2403.cpp，相关makefile工程文件编译命令编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs avrasm"><div class="hljs-line">OBJECTS=chapter2403.o
+</div><div class="hljs-line">CC=g++
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-symbol">chapter2403:</span> $(OBJECTS)
+</div><div class="hljs-line">    $(CC) $(OBJECTS) -g -o chapter2403
+</div><div class="hljs-line"><span class="hljs-symbol">clean:</span>
+</div><div class="hljs-line">    rm -f chapter2403 core $(OBJECTS)
+</div><div class="hljs-line"><span class="hljs-symbol">submit:</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">cp</span> -f -r chapter2403 ../bin
+</div></code></pre>
+
+<p>上述makefile文件套用前面的模板格式，主要替换了代码文件、程序编译中间文件、可执行程序等。在编译命令部分-g选项的加入，表明程序编译同时加入了可调式信息。 <br>
+c.编译运行程序</p>
+
+<p>当前shell下执行make命令，生成可执行程序文件，随后通过makesubmit命令提交程序文件至本实例bin目录，通过cd命令定位至bin目录，执行该程序文件运行结果如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs elixir"><div class="hljs-line">[developer@ localhost src]<span class="hljs-variable">$ </span>ipcs -q
+</div><div class="hljs-line">------ Message Queues --------
+</div><div class="hljs-line">key        msqid      owner      perms      used-bytes   messages
+</div><div class="hljs-line"><span class="hljs-number">0x00001010</span> <span class="hljs-number">360448</span>     developer  <span class="hljs-number">600</span>        <span class="hljs-number">0</span>            <span class="hljs-number">0</span>
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>make
+</div><div class="hljs-line">g++    -c -o chapter2403.o chapter2403.cpp
+</div><div class="hljs-line">g++ chapter2403.o -g -o chapter2403
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>make submit
+</div><div class="hljs-line">cp -f -r chapter2403 ../bin
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>cd ../bin
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> bin]<span class="hljs-variable">$ </span>./chapter2403
+</div><div class="hljs-line">remove msg queue success!
+</div><div class="hljs-line">[developer@ localhost src]<span class="hljs-variable">$ </span>ipcs -q
+</div><div class="hljs-line">------ Message Queues --------
+</div><div class="hljs-line">key        msqid      owner      perms      used-bytes   messages
+</div></code></pre>
+
+<p>d.程序说明 <br>
+上述实例中首先采用ipcs工具查询系统中存在的消息队列，根据前面通信实例创建的消息队列情况，程序中指定了相应的key值来删除队列，随后程序执行显示删除消息队列成功，ipcs工具检查相应的队列是否已经被清除掉。</p>
+
+<p>实例程序中主要包含两个方法，一个是清除指定key值得消息队列方法，另一个是判断相应队列是否存在的方法。方法remove中主要调用msgget方法检验对应消息队列是否存在，如果存在的话调用对应的msgctl方法，指定IPC_RMID命令来删除对应的消息队列。方法isExist用于判断指定的key值消息队列是否存在。</p>
+
+<p>该方法中也是通过msgget方法返回值来判断对于的消息队列是否存在，如果存在则返回1，否则直接调用msgctl方法删除之，原因是前面通过打开或创建方法创建了相应的消息队列。主程序中首先需要指定相应的key，根据需要删除的消息队列指定key为0x00001010。调用remove方法根据传入的key删除该消息队列，随后调用isExist方法判断之。 <br>
+6.消息队列封装实例</p>
+
+<p>在应用中通常IPC基本操作都可以封装为相应的C++类类型，通过类在应用程序中直接使用，不仅仅可扩展性增强，封装隐藏相应操作数据，并且可以将类类型当作基本类型定义相应对象使用。本小节主要通过C++语言将消息队列的基本操作封装为相应的消息队列类类型在应用程序中使用，代码如下。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-comment">//消息队列操作类封装头文件IpcMsgQue.h</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">ifndef</span> IPCMSGQUE_H</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> IPCMSGQUE_H</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;errno.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/msg.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;fcntl.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> BUFFER_SIZE 512</span>
+</div><div class="hljs-line"><span class="hljs-comment">//消息结构体</span>
+</div><div class="hljs-line"><span class="hljs-keyword">struct</span> IpcMsgBuf
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">long</span> m_type;                                        <span class="hljs-comment">//消息类型</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">char</span> m_text[BUFFER_SIZE+<span class="hljs-number">1</span>];                         <span class="hljs-comment">//消息数据</span>
+</div><div class="hljs-line">};
+</div><div class="hljs-line"><span class="hljs-comment">//消息队列操作类</span>
+</div><div class="hljs-line"><span class="hljs-keyword">class</span> IpcMsg
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">public</span>:
+</div><div class="hljs-line">        IpcMsg(){}                                      <span class="hljs-comment">//消息队列操作类构造函数</span>
+</div><div class="hljs-line">        ~IpcMsg(){}                                    <span class="hljs-comment">//消息队列操作类析构函数</span>
+</div><div class="hljs-line">            <span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">create</span><span class="hljs-params">(<span class="hljs-keyword">int</span> key)</span></span>;                                <span class="hljs-comment">//消息队列创建方法</span>
+</div><div class="hljs-line">            <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">remove</span><span class="hljs-params">(<span class="hljs-keyword">int</span> key)</span></span>;                               <span class="hljs-comment">//消息队列删除方法</span>
+</div><div class="hljs-line">            <span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">isExist</span><span class="hljs-params">(<span class="hljs-keyword">int</span> key)</span></span>;                               <span class="hljs-comment">//判断指定消息队列是否存在方法</span>
+</div><div class="hljs-line">        <span class="hljs-function"><span class="hljs-keyword">long</span> <span class="hljs-title">getkey</span><span class="hljs-params">()</span></span>;                                  <span class="hljs-comment">//获取消息队列key值方法</span>
+</div><div class="hljs-line">        <span class="hljs-function"><span class="hljs-keyword">long</span> <span class="hljs-title">getipcid</span><span class="hljs-params">()</span></span>;                                    <span class="hljs-comment">//获取消息队列描述符方法</span>
+</div><div class="hljs-line">        <span class="hljs-function"><span class="hljs-keyword">long</span> <span class="hljs-title">getmsgcnt</span><span class="hljs-params">()</span></span>;                               <span class="hljs-comment">//获取消息队列消息数方法</span>
+</div><div class="hljs-line">        <span class="hljs-function"><span class="hljs-keyword">long</span> <span class="hljs-title">getcbytes</span><span class="hljs-params">()</span></span>;                               <span class="hljs-comment">//获取消息队列当前字节数方法</span>
+</div><div class="hljs-line">        <span class="hljs-function"><span class="hljs-keyword">long</span> <span class="hljs-title">getqbytes</span><span class="hljs-params">()</span></span>;                               <span class="hljs-comment">//获取消息队列中最大容量字节数方法</span>
+</div><div class="hljs-line">        <span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">put</span><span class="hljs-params">(IpcMsgBuf&amp; msg, <span class="hljs-keyword">int</span> msglen, <span class="hljs-keyword">int</span> flag)</span></span>;          <span class="hljs-comment">//发送消息方法</span>
+</div><div class="hljs-line">        <span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">get</span><span class="hljs-params">(IpcMsgBuf&amp; msg, <span class="hljs-keyword">int</span> maxmsglen, <span class="hljs-keyword">int</span> flag)</span></span>;       <span class="hljs-comment">//获取消息方法</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">private</span>:
+</div><div class="hljs-line">        <span class="hljs-keyword">int</span> m_key;                                      <span class="hljs-comment">//消息队列key值</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">int</span> m_msgid;                                    <span class="hljs-comment">//消息队列描述符</span>
+</div><div class="hljs-line">};
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">endif</span></span>
+</div><div class="hljs-line"><span class="hljs-comment">//消息队列操作类封装源文件IpcMsgQue.cpp</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">"IpcMsgQue.h"</span></span>
+</div><div class="hljs-line"><span class="hljs-comment">//消息队列创建方法定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">int</span> IpcMsg::create(<span class="hljs-keyword">int</span> key)
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> msgid;                                          <span class="hljs-comment">//定义描述符变量</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> ((msgid = msgget(key, IPC_CREAT | IPC_EXCL | <span class="hljs-number">0600</span>)) == <span class="hljs-number">-1</span>) <span class="hljs-comment">//调用创建消息队列方法进行判断</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"创建消息队列错误"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;                 <span class="hljs-comment">//如果创建失败，打印提示信息</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> msgid;                                       <span class="hljs-comment">//返回相应的消息队列描述符</span>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">//删除消息队列方法定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">void</span> IpcMsg::remove(<span class="hljs-keyword">int</span> key)
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> msgid;                                          <span class="hljs-comment">//定义描述符变量</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> ((msgid = msgget(key, <span class="hljs-number">0</span>)) != <span class="hljs-number">-1</span>)                         <span class="hljs-comment">//调用打开或创建消息队列方法进行判断</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        msgctl(msgid, IPC_RMID, (<span class="hljs-keyword">struct</span> msqid_ds*)<span class="hljs-number">0</span>);       <span class="hljs-comment">//如果存在则删除</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">//判断消息队列是否存在方法定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">int</span> IpcMsg::isExist(<span class="hljs-keyword">int</span> key)
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> msgid;                                          <span class="hljs-comment">//定义描述符变量</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> ((msgid = msgget(key, IPC_CREAT | IPC_EXCL)) == <span class="hljs-number">-1</span>)  <span class="hljs-comment">//调用打开或创建消息队列方法进行判断</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-number">1</span>;                                       <span class="hljs-comment">//如果存在则返回1</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    msgctl(msgid, IPC_RMID, (<span class="hljs-keyword">struct</span> msqid_ds*)<span class="hljs-number">0</span>);           <span class="hljs-comment">//否则删除创建的消息队列</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">//获取消息队列key方法定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">long</span> IpcMsg::getkey()
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> m_key;                                       <span class="hljs-comment">//返回相应的消息队列key值</span>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">//获取消息队列描述符方法定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">long</span> IpcMsg::getipcid()
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> m_msgid;                                 <span class="hljs-comment">//返回相应消息队列的描述符</span>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">//获取消息队列消息数方法定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">long</span> IpcMsg::getmsgcnt()
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span> msqid_ds _mds;                               <span class="hljs-comment">//定义消息队列状态结构对象</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (msgctl(m_msgid, IPC_STAT, &amp;_mds) == <span class="hljs-number">-1</span>)             <span class="hljs-comment">//调用相应控制方法获取状态信息</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"获取状态失败!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> _mds.msg_qnum;                               <span class="hljs-comment">//返回相应的消息数成员值</span>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">//获取消息队列当前字节数方法定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">long</span> IpcMsg::getcbytes()
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span> msqid_ds _mds;                               <span class="hljs-comment">//定义消息队列状态结构对象</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (msgctl(m_msgid, IPC_STAT, &amp;_mds) == <span class="hljs-number">-1</span>)             <span class="hljs-comment">//调用相应控制方法获取状态信息</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"获取状态失败!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> _mds.msg_cbytes;                             <span class="hljs-comment">//返回相应的消息队列字节数</span>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">//获取消息队列中最大容量字节数方法定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">long</span> IpcMsg::getqbytes()
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span> msqid_ds _mds;                               <span class="hljs-comment">//定义消息队列状态结构对象</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (msgctl(m_msgid, IPC_STAT, &amp;_mds) == <span class="hljs-number">-1</span>)             <span class="hljs-comment">//调用相应控制方法获取状态信息</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"获取状态失败!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> _mds.msg_qbytes;                             <span class="hljs-comment">//返回相应的消息队列最大容量</span>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">//发送消息方法定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">int</span> IpcMsg::put(IpcMsgBuf&amp; msg, <span class="hljs-keyword">int</span> msglen, <span class="hljs-keyword">int</span> flag=<span class="hljs-number">0</span>)
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (msgsnd(m_msgid, &amp;msg, msglen, <span class="hljs-number">0</span>|flag) == <span class="hljs-number">-1</span>)            <span class="hljs-comment">//调用发送数据并判断返回值</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-keyword">if</span> (errno == EAGAIN)
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-keyword">return</span> <span class="hljs-number">-1</span>;
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">        <span class="hljs-keyword">else</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"发送消息错误"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;       
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">//接受消息方法定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">int</span> IpcMsg::get(IpcMsgBuf&amp; msg, <span class="hljs-keyword">int</span> msglen, <span class="hljs-keyword">int</span> flag=<span class="hljs-number">0</span>)
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (msgrcv(m_msgid, &amp;msg, msglen, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>|flag) == <span class="hljs-number">-1</span>)         <span class="hljs-comment">//调用接受消息数据方法判断返回值</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-keyword">if</span> (errno == ENOMSG)
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-keyword">return</span> <span class="hljs-number">-1</span>;
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">        <span class="hljs-keyword">else</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"接收消息错误"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>Linux下需要编译的源文件为IpcMsgQue.cpp，其创建静态库的相关过程如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs stylus"><div class="hljs-line">[developer@localhost msg]$ g++ -O -c IpcMsgQue<span class="hljs-selector-class">.cpp</span>
+</div><div class="hljs-line">[developer@localhost msg]$ ar -rsv libipcmsg<span class="hljs-selector-class">.a</span> IpcMsgQue<span class="hljs-selector-class">.o</span>
+</div><div class="hljs-line"><span class="hljs-selector-tag">a</span> - IpcMsgQue<span class="hljs-selector-class">.o</span>
+</div><div class="hljs-line">[developer@localhost msg]$ ls *<span class="hljs-selector-class">.a</span>
+</div><div class="hljs-line">libipcmsg.a
+</div></code></pre>
+
+<p>当前shell下执行上述编译命令之后，生成相应的消息队列操作静态库libipcmsg.a，在实际应用程序中需要使用消息队列操作时，可以编译连接该库在程序中包含相应头文件直接使用。本实例中主要包含了消息队列的基本操作以及相关状态信息获取操作，本类中的相关消息队列基本操作方法在前面小节都已经详细解释说明过，初学者可以在应用实例中编译连接该库验证其实际使用情况。</p></div>

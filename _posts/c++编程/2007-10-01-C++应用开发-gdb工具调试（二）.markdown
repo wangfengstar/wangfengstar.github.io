@@ -1,0 +1,376 @@
+---
+layout: post
+title: C++应用开发-gdb工具调试（二）
+categories: c++编程
+description: C++应用开发-gdb工具调试（二）
+keywords: C++编程
+---
+<div id='preview-contents' class='note-content'>
+
+
+
+<p>在上篇基础上进一步看看gdb工具使用。 <br>
+<strong>1.调试实例准备</strong> <br>
+本小节将会以一个实际存在内部执行错误的应用实例作为起步，分别介绍如何使用gdb解决日常应用程序调试问题。该实例程序主要用于演示日常开发中变量定义后初始化的重要性，实例编辑如下所示。 <br>
+//实例chapter0304</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-comment">//源文件chapter0304.cpp</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">/*调试测试方法*/</span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">testGdb</span><span class="hljs-params">(<span class="hljs-keyword">int</span> n)</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> sum;            <span class="hljs-comment">//定义整型变量sum表示计算结果</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i=<span class="hljs-number">0</span>;i&lt;n;i++)<span class="hljs-comment">//通过for循环计算结果</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">       sum+=i;         <span class="hljs-comment">//计算数从0到n相加结果</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> sum;        <span class="hljs-comment">//返回最终结果</span>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">/*主程序入口*/</span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> result;           <span class="hljs-comment">//定义整型变量表示计算结果</span>
+</div><div class="hljs-line">    result = testGdb(<span class="hljs-number">10</span>); <span class="hljs-comment">//调用计算函数，将其结果赋给result变量</span>
+</div><div class="hljs-line">    <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"result:"</span>&lt;&lt;result&lt;&lt;<span class="hljs-built_in">endl</span>; <span class="hljs-comment">//打印输出结果</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>Linux平台下需要编译的源文件为chapter0304.cpp，为了调试应用编译选项需要加上-g添加调试信息，该程序文件编译命令如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs stylus"><div class="hljs-line">g++ -g chapter0304<span class="hljs-selector-class">.cpp</span> –o chapter0304
+</div></code></pre>
+
+<p>当前shell下，执行上述编译命令，生成可执行程序chapter0304，通过cp命令拷贝至本实例bin目录，cd定位至实例bin目录后执行该程序，运行程序结果如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs elixir"><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$g</span>++ -g chapter0304.cpp -o chapter0304
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$cp</span> chapter0304 ../bin
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$cd</span> ../bin
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$.</span>/chapter0304
+</div><div class="hljs-line"><span class="hljs-symbol">result:</span><span class="hljs-number">1108544065</span>
+</div></code></pre>
+
+<p>从上述实例程序来看，方法testGdb主要根据传入的参数变量来计算从0到n的数相加结果。主程序中首先定义结果变量，调用该计算方法传入参数为10，计算其相加结果。而testGdb函数的内部实现也很简单，通过定义和变量以及for循环相加的操作，最终返回和结果。</p>
+
+<p>程序添加-g选项编译成功后，到bin目录执行该程序文件，很显然运行计算结果并不是事先设计所期望的结果。上述程序运行结果变为了一个很大的整型数，而不是简单的1到10数字之间的和。对于初学者来讲，有些常见的程序使用习惯可能还没有形成，此时就需要借助gdb调试工具来解决程序问题。</p>
+
+<p><strong>2.使用断点</strong> <br>
+当编制的程序出现意想不到的问题之后，首先初学者应该学会采用基本掌握的程序概念去仔细排查所编写的代码，如果实在解决不了则可以通过gdb工具来辅助解决程序内部隐含的问题。上述实例程序运行时并没有出现任何的问题，但是计算的结果与程序的计算目的不相符合，此时启动gdb来调试该程序。</p>
+
+<p>对于gdb调试来讲，首先分析程序组成，该实例主要由主程序与testGdb函数构成，因此可以考虑先设置两个断点，一个设定在main函数入口，另一个则为testGdb函数入口。程序调试演示如下。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs stata"><div class="hljs-line">[developer @localhost bin]<span class="hljs-variable">$gdb</span> chapter0304  <span class="hljs-comment">//加载调试程序</span>
+</div><div class="hljs-line">GNU gdb Red Hat Linux (5.3post-0.20021129.18rh)
+</div><div class="hljs-line"><span class="hljs-keyword">Copyright</span> 2003 Free Software Foundation, Inc.
+</div><div class="hljs-line">GDB is free software, covered <span class="hljs-keyword">by</span> the GNU General Public License, and you are
+</div><div class="hljs-line">welcome to change it and/or distribute copies of it under certain conditions.
+</div><div class="hljs-line"><span class="hljs-keyword">Type</span> <span class="hljs-string">"show copying"</span> to see the conditions.
+</div><div class="hljs-line">There is absolutely <span class="hljs-keyword">no</span> warranty <span class="hljs-keyword">for</span> GDB.  <span class="hljs-keyword">Type</span> <span class="hljs-string">"show warranty"</span> <span class="hljs-keyword">for</span> details.
+</div><div class="hljs-line">This GDB was configured <span class="hljs-keyword">as</span> <span class="hljs-string">"i386-redhat-linux-gnu"</span>...
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">break</span> main                 <span class="hljs-comment">//通过break命令设置主程序入口断点</span>
+</div><div class="hljs-line">Breakpoint 1 at 0x804867c: <span class="hljs-keyword">file</span> chapter0304.cpp, <span class="hljs-keyword">line</span> 16.
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">break</span> testGdb              <span class="hljs-comment">//通过break命令设置测试函数断点</span>
+</div><div class="hljs-line">Breakpoint 2 at 0x8048646: <span class="hljs-keyword">file</span> chapter0304.cpp, <span class="hljs-keyword">line</span> 7.
+</div><div class="hljs-line">(gdb) info breakpoints           <span class="hljs-comment">//检查当前程序拥有的断点信息</span>
+</div><div class="hljs-line">Num <span class="hljs-keyword">Type</span>           <span class="hljs-keyword">Disp</span> Enb Address    What
+</div><div class="hljs-line">1   breakpoint     <span class="hljs-keyword">keep</span> y   0x0804867c <span class="hljs-keyword">in</span> main at chapter0304.cpp:16
+</div><div class="hljs-line">2   breakpoint     <span class="hljs-keyword">keep</span> y   0x08048646 <span class="hljs-keyword">in</span> testGdb(int) at chapter0304.cpp:7
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">run</span>                         <span class="hljs-comment">//当前调试会话下执行程序</span>
+</div><div class="hljs-line">Starting <span class="hljs-keyword">program</span>: /home/ocs/users/wangfeng/Linux_c++/chapter03/chapter0304/bin/chapter0304
+</div><div class="hljs-line">Breakpoint 1, main () at chapter0304.cpp:16  <span class="hljs-comment">//程序在第一个断点处停下</span>
+</div><div class="hljs-line">16          result = testGdb(10);
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">n</span>                           <span class="hljs-comment">//单步执行代码</span>
+</div><div class="hljs-line">Breakpoint 2, testGdb(int) (<span class="hljs-keyword">n</span>=10) at chapter0304.cpp:7 <span class="hljs-comment">//在第二个断点处停下</span>
+</div><div class="hljs-line">7           <span class="hljs-keyword">for</span>(int i=0;i&lt;<span class="hljs-keyword">n</span>;i++)  <span class="hljs-comment">//下一步执行代码为testGdb循环体</span>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">print</span> <span class="hljs-keyword">sum</span>                   <span class="hljs-comment">//打印变量和sum值</span>
+</div><div class="hljs-line"><span class="hljs-variable">$1</span> = 1108544020                   <span class="hljs-comment">//此时加法操作未执行，输出默认值</span>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">n</span>                           <span class="hljs-comment">//单步执行代码</span>
+</div><div class="hljs-line">9              <span class="hljs-keyword">sum</span>+=i;            <span class="hljs-comment">//下一步执行加法操作</span>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">print</span> <span class="hljs-keyword">sum</span>                   <span class="hljs-comment">//打印变量和sum值</span>
+</div><div class="hljs-line"><span class="hljs-variable">$2</span> = 1108544020                   <span class="hljs-comment">//此时加0操作，输出结果</span>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">n</span>                           <span class="hljs-comment">//单步执行代码</span>
+</div><div class="hljs-line">7           <span class="hljs-keyword">for</span>(int i=0;i&lt;<span class="hljs-keyword">n</span>;i++)  <span class="hljs-comment">//下一步执行循环体</span>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">n</span>                           <span class="hljs-comment">//单步执行代码</span>
+</div><div class="hljs-line">9              <span class="hljs-keyword">sum</span>+=i;            <span class="hljs-comment">//下一步执行加法操作</span>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">n</span>                           <span class="hljs-comment">//单步执行代码</span>
+</div><div class="hljs-line">7           <span class="hljs-keyword">for</span>(int i=0;i&lt;<span class="hljs-keyword">n</span>;i++)  <span class="hljs-comment">//再次进入循环体</span>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">print</span> <span class="hljs-keyword">sum</span>                   <span class="hljs-comment">//打印和变量，结果发生变化</span>
+</div><div class="hljs-line"><span class="hljs-variable">$3</span> = 1108544021
+</div></code></pre>
+
+<p>通过gdb命令紧跟调试实例程序名，将程序加载至gdb调试工具中。根据分析程序的基本组成，将会分别在两个函数入口设置断点，随后通过info命令查看断点信息确认断点是否设置成功。通过run命令在当前调试会话中执行该实例程序，运行至第一个断点即主函数入口处。</p>
+
+<p>从上述演示过程可以看出，通过next单步执行命令，程序运行至调用方法testGdb处。再次执行next单步命令后，程序运行至第二个断点处，即testGdb函数入口处。此时通过print命令打印输出testGdb函数内部sum变量内容值，通过上述操作可以看出是一个很大的数为1108544020。</p>
+
+<p>继续执行next命令之后，程序运行至for循环的第一步，此时打印变量sum发现依然为1108544020，因为此时并没有执行过该行代码，再次执行next命令之后进入for第二次循环之后打印发现sum变量变为1108544021，此时分析应该可知计算结果变量sum并没有从0开始累加，而是一开始就被赋予了一个系统默认值。</p>
+
+<p>按照上述诊断，由于函数testGdb内部计算和的变量是从1108544020开始，因此导致了程序计算到最后得到并非传入的10以内的数字相加的结果。从上述简单的gdb调试加分析来看，很可能是因为函数testGdb内部变量sum定义时没有被初始化0导致的。</p>
+
+<p>因此，上述程序在定义sum变量时候直接初始化为0可以解决该问题。该调试实例也提醒初学者在定义局部变量使用前，一定要保持初始化的习惯，否则很可能变量中存在一个未知数值参与计算。</p>
+
+<p><strong>3.观察点应用</strong> <br>
+上述程序出现的隐藏调试问题除了可以采用断点设置，另外通过单步调试打印过程处理变量值排查之外，还可以通过在调试会话中给程序代码设置相应的观察点，通过观察某些具体变量的执行变化情况来确定程序出错的原因。</p>
+
+<p>对于gdb调试工具，设置观察点采用watch命令，主要功能用于观察某个需要的表达式的值是否发生变化，一旦调试发现该观察点发生变化，则停住程序供开发者查看具体处理过程。而提供的rwatch命令则用于观察的表达式被读取的时候，停住程序；另外awatch命令则表示观察的表达式被读取或者被写入的时候，停住程序。最后通过info命令后加watchpoints可以查看相关观察点信息。</p>
+
+<p>下面将会采用设置观察点来调试上小节出现计算错误的实例程序，采用观察点调试实例演示如下。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs stata"><div class="hljs-line">[developer @localhost bin]<span class="hljs-variable">$gdb</span> chapter0304   <span class="hljs-comment">//加载调试程序</span>
+</div><div class="hljs-line">GNU gdb Red Hat Linux (5.3post-0.20021129.18rh)
+</div><div class="hljs-line"><span class="hljs-keyword">Copyright</span> 2003 Free Software Foundation, Inc.
+</div><div class="hljs-line">GDB is free software, covered <span class="hljs-keyword">by</span> the GNU General Public License, and you are
+</div><div class="hljs-line">welcome to change it and/or distribute copies of it under certain conditions.
+</div><div class="hljs-line"><span class="hljs-keyword">Type</span> <span class="hljs-string">"show copying"</span> to see the conditions.
+</div><div class="hljs-line">There is absolutely <span class="hljs-keyword">no</span> warranty <span class="hljs-keyword">for</span> GDB.  <span class="hljs-keyword">Type</span> <span class="hljs-string">"show warranty"</span> <span class="hljs-keyword">for</span> details.
+</div><div class="hljs-line">This GDB was configured <span class="hljs-keyword">as</span> <span class="hljs-string">"i386-redhat-linux-gnu"</span>...
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">break</span> main                   <span class="hljs-comment">//主程序入口设置断点</span>
+</div><div class="hljs-line">Breakpoint 1 at 0x804867c: <span class="hljs-keyword">file</span> chapter0304.cpp, <span class="hljs-keyword">line</span> 16.
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">break</span> testGdb                <span class="hljs-comment">//测试调试函数处设置断点</span>
+</div><div class="hljs-line">Breakpoint 2 at 0x8048646: <span class="hljs-keyword">file</span> chapter0304.cpp, <span class="hljs-keyword">line</span> 7.
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">run</span>                          <span class="hljs-comment">//当前调试会话中执行程序</span>
+</div><div class="hljs-line">Starting <span class="hljs-keyword">program</span>: /home/ocs/users/wangfeng/Linux_c++/chapter03/chapter0304/bin/chapter0304
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">Breakpoint 1, main () at chapter0304.cpp:16  <span class="hljs-comment">//停留在第一个断点处</span>
+</div><div class="hljs-line">16          result = testGdb(10);
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">n</span>                            <span class="hljs-comment">//单步执行代码</span>
+</div><div class="hljs-line">Breakpoint 2, testGdb(int) (<span class="hljs-keyword">n</span>=10) at chapter0304.cpp:7
+</div><div class="hljs-line">7           <span class="hljs-keyword">for</span>(int i=0;i&lt;<span class="hljs-keyword">n</span>;i++)   <span class="hljs-comment">//进入循环方法</span>
+</div><div class="hljs-line">(gdb) watch <span class="hljs-keyword">sum</span>+=<span class="hljs-built_in">i</span>
+</div><div class="hljs-line">Watchpoint 4: <span class="hljs-keyword">sum</span> += <span class="hljs-built_in">i</span>
+</div><div class="hljs-line">(gdb) c
+</div><div class="hljs-line">Continuing.
+</div><div class="hljs-line">Watchpoint 4: <span class="hljs-keyword">sum</span> += <span class="hljs-built_in">i</span>
+</div><div class="hljs-line">Old value = -2077877972
+</div><div class="hljs-line">New value = -2077877971
+</div><div class="hljs-line">0x08048664 <span class="hljs-keyword">in</span> testGdb(int) (<span class="hljs-keyword">n</span>=10) at chapter0304.cpp:7
+</div><div class="hljs-line">7           <span class="hljs-keyword">for</span>(int i=0;i&lt;<span class="hljs-keyword">n</span>;i++)
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">n</span>
+</div><div class="hljs-line">Watchpoint 4: <span class="hljs-keyword">sum</span> += <span class="hljs-built_in">i</span>
+</div><div class="hljs-line">Old value = -2077877971
+</div><div class="hljs-line">New value = -2077877970
+</div><div class="hljs-line">0x0804864d <span class="hljs-keyword">in</span> testGdb(int) (<span class="hljs-keyword">n</span>=10) at chapter0304.cpp:7
+</div><div class="hljs-line">7           <span class="hljs-keyword">for</span>(int i=0;i&lt;<span class="hljs-keyword">n</span>;i++)
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">print</span> <span class="hljs-built_in">sum</span>
+</div><div class="hljs-line"><span class="hljs-variable">$1</span> = -2077877970
+</div></code></pre>
+
+<p>想要在调试程序函数内部设置观察点，首先需要通过断点设置运行至该函数内部。因此调试过程中设置两个断点main与testGdb处，通过run命令在当前调试会话中执行该程序，运行至第一个断点处。当执行next单步调试时，程序运行到第二个断点处停住。</p>
+
+<p>通过watch命令设置for循环体中计算表达式sum+=i，通过continue命令继续运行程序直至该观察点表达式值发生变化则停住。从上述调试演示来看，程序在第一次循环处理时该表达式就发生了变化，并且还列出该表达式老的值与变化后的值之间的对比。</p>
+
+<p>从观察点变化看来，sum表达式计算结果在原来基础上增加了1，而随后两次next单步执行都可以看出每次变化的值对比。最后可以通过print命令打印观察sum变量的当前值，从本次调试中依然可以看出sum由于没有初始化，因此被系统赋予了一个不确定的很大的数值，再次提醒初学者使用局部变量前一定要注意初始化工作。</p>
+
+<p>修改上述实例程序，在函数testGdb中定义局部变量sum时初始化其为0，随后执行编译命令生成可执行文件后，运行该程序并且通过设置观察点查看程序是否正常，检查是否因为没有初始化局部变量引起该隐藏错误，程序修改后调试演示如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs groovy"><div class="hljs-line">(gdb) <span class="hljs-keyword">break</span> main                <span class="hljs-comment">//主程序入口处设置断点</span>
+</div><div class="hljs-line">Breakpoint <span class="hljs-number">1</span> at <span class="hljs-number">0x8048682</span>: file chapter0304.cpp, line <span class="hljs-number">16.</span>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">break</span> testGdb             <span class="hljs-comment">//调试函数处设置断点</span>
+</div><div class="hljs-line">Breakpoint <span class="hljs-number">2</span> at <span class="hljs-number">0x8048646</span>: file chapter0304.cpp, line <span class="hljs-number">6.</span>
+</div><div class="hljs-line">(gdb) r                         <span class="hljs-comment">//当前调试会话中执行程序</span>
+</div><div class="hljs-line">Starting <span class="hljs-string">program:</span> <span class="hljs-regexp">/home/</span>ocs<span class="hljs-regexp">/users/</span>wangfeng<span class="hljs-regexp">/Linux_c++/</span>chapter03<span class="hljs-regexp">/chapter0304/</span>bin/chapter0304
+</div><div class="hljs-line">Breakpoint <span class="hljs-number">1</span>, main () at chapter0304.<span class="hljs-string">cpp:</span><span class="hljs-number">16</span>
+</div><div class="hljs-line"><span class="hljs-number">16</span>          result = testGdb(<span class="hljs-number">10</span>);
+</div><div class="hljs-line">(gdb) n                          <span class="hljs-comment">//单步执行程序</span>
+</div><div class="hljs-line">Breakpoint <span class="hljs-number">2</span>, testGdb(<span class="hljs-keyword">int</span>) (n=<span class="hljs-number">10</span>) at chapter0304.<span class="hljs-string">cpp:</span><span class="hljs-number">6</span>
+</div><div class="hljs-line"><span class="hljs-number">6</span>           <span class="hljs-keyword">int</span> sum=<span class="hljs-number">0</span>;           <span class="hljs-comment">//和变量定义代码</span>
+</div><div class="hljs-line">(gdb) n                          <span class="hljs-comment">//单步执行程序</span>
+</div><div class="hljs-line"><span class="hljs-number">7</span>           <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i=<span class="hljs-number">0</span>;i&lt;n;i++) <span class="hljs-comment">//for循环定义代码</span>
+</div><div class="hljs-line">(gdb) n                          <span class="hljs-comment">//单步执行代码</span>
+</div><div class="hljs-line"><span class="hljs-number">9</span>              sum+=i;           <span class="hljs-comment">//执行加法运算循环体</span>
+</div><div class="hljs-line">(gdb) watch sum+=i               <span class="hljs-comment">//在该行代码设置观察点</span>
+</div><div class="hljs-line">Watchpoint <span class="hljs-number">3</span>: sum += i
+</div><div class="hljs-line">(gdb) c                          <span class="hljs-comment">//继续执行程序</span>
+</div><div class="hljs-line">Continuing.
+</div><div class="hljs-line">Watchpoint <span class="hljs-number">3</span>: sum += i           <span class="hljs-comment">//观察点设置代码处发生变化停下</span>
+</div><div class="hljs-line">Old value = <span class="hljs-number">0</span>                    <span class="hljs-comment">//打印该观察点代码表达式发生变化的新老值</span>
+</div><div class="hljs-line">New value = <span class="hljs-number">1</span>
+</div><div class="hljs-line"><span class="hljs-number">0x0804866b</span> <span class="hljs-keyword">in</span> testGdb(<span class="hljs-keyword">int</span>) (n=<span class="hljs-number">10</span>) at chapter0304.<span class="hljs-string">cpp:</span><span class="hljs-number">7</span> <span class="hljs-comment">//停在下一个断点执行处</span>
+</div><div class="hljs-line"><span class="hljs-number">7</span>           <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i=<span class="hljs-number">0</span>;i&lt;n;i++) <span class="hljs-comment">//下一步执行代码继续进入for循环体</span>
+</div><div class="hljs-line">(gdb) n                          <span class="hljs-comment">//单步执行程序，继续观察观察点表达式变化</span>
+</div><div class="hljs-line">Watchpoint <span class="hljs-number">3</span>: sum += i
+</div><div class="hljs-line">Old value = <span class="hljs-number">1</span>
+</div><div class="hljs-line">New value = <span class="hljs-number">2</span>
+</div><div class="hljs-line"><span class="hljs-number">0x08048654</span> <span class="hljs-keyword">in</span> testGdb(<span class="hljs-keyword">int</span>) (n=<span class="hljs-number">10</span>) at chapter0304.<span class="hljs-string">cpp:</span><span class="hljs-number">7</span>
+</div><div class="hljs-line"><span class="hljs-number">7</span>           <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i=<span class="hljs-number">0</span>;i&lt;n;i++)
+</div><div class="hljs-line">(gdb) n
+</div><div class="hljs-line">Watchpoint <span class="hljs-number">3</span>: sum += i
+</div><div class="hljs-line">Old value = <span class="hljs-number">2</span>
+</div><div class="hljs-line">New value = <span class="hljs-number">3</span>
+</div><div class="hljs-line"><span class="hljs-number">0x08048657</span> <span class="hljs-keyword">in</span> testGdb(<span class="hljs-keyword">int</span>) (n=<span class="hljs-number">10</span>) at chapter0304.<span class="hljs-string">cpp:</span><span class="hljs-number">7</span>
+</div><div class="hljs-line"><span class="hljs-number">7</span>           <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i=<span class="hljs-number">0</span>;i&lt;n;i++)
+</div></code></pre>
+
+<p>通过在testGdb函数中定义sum变量时，直接将其初始化为0，即在定义sum变量时将其赋值为0。此时通过设置断点，在调试会话中执行该程序，运行至第二个断点处单步执行至for循环体第一行代码，随后通过watch命令设置表达式sum+=i为观察点。继续运行程序，通过单步执行可以看出此时观察点的表达式计算结果值正从0按照计算规则运行累加。</p>
+
+<p><strong>4.core文件</strong> <br>
+Linux系统下通常与上述的应用程序隐藏的计算错误不同，有一类错误在程序运行时或者在运行到某个临界点条件时，程序表现出不正常处理直接导致奔溃，这种情况下的应用程序错误通常会产生core文件。应用程序运行出错导致奔溃退出，通常由于某种错误产生的中断信号导致的。</p>
+
+<p>这类程序错误当然也可以通过前面介绍的调试方法来调试，但是如果涉及程序代码相当多，并且分好多文件时，采用设置断点以及单步调试的方法会显得非常的费力，此时针对core文件的调试能够准备快速的定位至程序出错前的处理状态，根据该状态推断程序可能出错的地方从而解决问题。</p>
+
+<p>1.core文件操作</p>
+
+<p>core文件有效的记录了程序运行至奔溃后之前的状态，gdb工具同样提供了通过加载应用程序出错的core文件，根据core文件内容来分析应用程序可能出错的地方，从而提出针对程序修正的方法。对于Linux系统，通常默认情况下core文件允许大小为0，因此需要通过该文件大小设置调整才可以让程序在异常奔溃退出的情况下将程序之前运行的相关状态信息记录进该文件，通过ulimit命令可以实现。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs scheme"><div class="hljs-line">[<span class="hljs-name">developer</span> @localhost]$ulimit -a
+</div><div class="hljs-line">core file size                (<span class="hljs-name">blocks</span>, -c) <span class="hljs-number">0</span>
+</div><div class="hljs-line">data seg size              (<span class="hljs-name">kbytes</span>, -d) unlimited
+</div><div class="hljs-line">file size                     (<span class="hljs-name">blocks</span>, -f) unlimited
+</div><div class="hljs-line">max locked memory              (<span class="hljs-name">kbytes</span>, -l) unlimited
+</div><div class="hljs-line">max memory size                (<span class="hljs-name">kbytes</span>, -m) unlimited
+</div><div class="hljs-line">open files               (<span class="hljs-name">-n</span>) <span class="hljs-number">1024</span>
+</div><div class="hljs-line">pipe size                    (<span class="hljs-name">512</span> bytes, -p) <span class="hljs-number">8</span>
+</div><div class="hljs-line">stack size                 (<span class="hljs-name">kbytes</span>, -s) <span class="hljs-number">8192</span>
+</div><div class="hljs-line">cpu time                  (<span class="hljs-name">seconds</span>, -t) unlimited
+</div><div class="hljs-line">max user processes              (<span class="hljs-name">-u</span>) <span class="hljs-number">7168</span>
+</div><div class="hljs-line">virtual memory           (<span class="hljs-name">kbytes</span>, -v) unlimited
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">[<span class="hljs-name">developer</span> @localhost]$ulimit -c <span class="hljs-number">2048</span>
+</div><div class="hljs-line">[<span class="hljs-name">developer</span> @localhost]$ulimit -a
+</div><div class="hljs-line">core file size                (<span class="hljs-name">blocks</span>, -c) <span class="hljs-number">2048</span>
+</div><div class="hljs-line">data seg size              (<span class="hljs-name">kbytes</span>, -d) unlimited
+</div><div class="hljs-line">file size                    (<span class="hljs-name">blocks</span>, -f) unlimited
+</div><div class="hljs-line">max locked memory              (<span class="hljs-name">kbytes</span>, -l) unlimited
+</div><div class="hljs-line">max memory size                (<span class="hljs-name">kbytes</span>, -m) unlimited
+</div><div class="hljs-line">open files               (<span class="hljs-name">-n</span>) <span class="hljs-number">1024</span>
+</div><div class="hljs-line">pipe size                    (<span class="hljs-name">512</span> bytes, -p) <span class="hljs-number">8</span>
+</div><div class="hljs-line">stack size                 (<span class="hljs-name">kbytes</span>, -s) <span class="hljs-number">8192</span>
+</div><div class="hljs-line">cpu time                  (<span class="hljs-name">seconds</span>, -t) unlimited
+</div><div class="hljs-line">max user processes              (<span class="hljs-name">-u</span>) <span class="hljs-number">7168</span>
+</div><div class="hljs-line">virtual memory           (<span class="hljs-name">kbytes</span>, -v) unlimited
+</div></code></pre>
+
+<p>Linux系统当前shell下，通过ulimit命令可以查看系统相关项的默认设置情况，第一项即为core文件大小的设置，单位为blocks（块），除此之外还有管道大小、最大进程数等项。上述演示通过ulimit命令配合-a选项查询系统中当前所有资源的限制情况，上述可以看出core文件默认情况下大小限制为0。</p>
+
+<p>对于当前调试应用来讲，只需要修改当前系统core文件大小限制即可，因此依然可以采用ulimit命令配合-c选项后跟大小具体数字即可修改当前core文件限制，上述设定修改core文件大小为2048 blocks，修改完毕后可以通过ulimit –a命令查看下是否系统已经完成core文件大小的修改。</p>
+
+<p>2.core文件调试实例 <br>
+通过对当前系统的core文件限制的修改，此时Linux系统上程序运行奔溃后会产生相应的core文件，下面将会通过一个完整的产生core文件的实例程序，演示gdb工具在Linux平台下如何根据产生的应用程序相应的core文件进行调试，最终定位程序运行问题。实例程序代码编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> SIZE 1024                 <span class="hljs-comment">//定义申请内存空间大小</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">/*申请动态内存空间方法*/</span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">char</span> *<span class="hljs-title">applyMemory</span><span class="hljs-params">()</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">char</span> *value = <span class="hljs-keyword">new</span> <span class="hljs-keyword">char</span>[SIZE]; <span class="hljs-comment">//通过new关键字申请字符型内存空间</span>
+</div><div class="hljs-line">    assert(value!=<span class="hljs-literal">NULL</span>);           <span class="hljs-comment">//判断内存申请是否成功</span>
+</div><div class="hljs-line">    <span class="hljs-built_in">memset</span>(value,<span class="hljs-number">0</span>,<span class="hljs-keyword">sizeof</span>(value)); <span class="hljs-comment">//申请成功后，将内存空间初始化</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> value;             <span class="hljs-comment">//返回申请到的内存空间指针</span>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">/*主程序入口*/</span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">char</span> *pTest = <span class="hljs-literal">NULL</span>;        <span class="hljs-comment">//字符型指针定义，初始化为NULL</span>
+</div><div class="hljs-line">    pTest = applyMemory();     <span class="hljs-comment">//调用申请内存方法，返回指针赋给pTest</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(pTest != <span class="hljs-literal">NULL</span>)         <span class="hljs-comment">//判断字符指针是否获取内存空间</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">      <span class="hljs-built_in">strcpy</span>(pTest,<span class="hljs-string">"hello!"</span>);   <span class="hljs-comment">//拷贝字符串数据至该内存空间</span>
+</div><div class="hljs-line">      <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"Show content:"</span>&lt;&lt;pTest&lt;&lt;<span class="hljs-built_in">endl</span>;<span class="hljs-comment">//打印输出字符指针指向内存空间内容</span>
+</div><div class="hljs-line">      <span class="hljs-keyword">delete</span>[] pTest;                 <span class="hljs-comment">//释放申请的内存空间</span>
+</div><div class="hljs-line">      pTest = <span class="hljs-literal">NULL</span>;                   <span class="hljs-comment">//将指针指向置空</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"Show content:"</span>&lt;&lt;*pTest&lt;&lt;<span class="hljs-built_in">endl</span>; <span class="hljs-comment">//再次打印输出指针指向内容</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>Linux平台下需要编译的源文件为chapter0305.cpp，相关程序g++编译命令需要加上-g产生调试信息，当前平台下编译命令编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs stylus"><div class="hljs-line">g++ -g chapter0305<span class="hljs-selector-class">.cpp</span> –o chapter0305
+</div></code></pre>
+
+<p>当前shell下执行上述编译命令，生成可执行程序chapter0305，通过cp命令拷贝至本实例bin目录，随后通过cd命令定位至实例bin目录，执行该程序文件运行结果如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs elixir"><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$g</span>++ -g chapter0305.cpp -o chapter0305
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$cp</span> chapter0305 ../bin
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$cd</span> ../bin
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$.</span>/chapter0305
+</div><div class="hljs-line">Show <span class="hljs-symbol">content:</span>hello!
+</div><div class="hljs-line">段错误 (core dumped)
+</div></code></pre>
+
+<p>大部分的应用程序可能都会涉及动态申请释放内存的操作，通常开发者在适当的场合会动态的申请内存空间，在使用完毕该内存空间后会通过相应的方法来释放。但是应用程序一旦比较庞大时，或者开发的组件、库等需要不同的人员之间相互配合编写的程序中，可能会因为释放了的内存空间依然会被使用。这个时候一般程序会因此而奔溃，并且这类错误通常会产生core文件。</p>
+
+<p>程序出现这类错误，开发者在调试检查时可以考虑直接查看core文件来了解程序奔溃前的运行状态，从而定位程序错误发生的位置。本实例演示一种简单情况下的core文件产生情况，程序中非常简单的演示了动态申请内存空间，在使用完毕后释放了，该空间又被意外的使用出现的问题调试。</p>
+
+<p>程序主要由两个方法组成，一个主函数与申请内存空间的方法applyMemory。其中方法applyMemory中固定的申请大小的内存空间，前面通过宏定义每次申请的空间SIZE固定大小。方法内部通过new关键字申请固定大小的内存空间，最后返回相应的指向该内存空间的指针。</p>
+
+<p>主程序中，首先定义空指针pTest，随后调用applyMemory动态的申请内存空间，将申请到的内存空间指针指向赋给pTest。判断该指针指向是否为空，如果不为空则拷贝字符串数据到所指向的内存空间。打印输出该指针指向空间内容，随后采用delete关键字释放内存空间，并将指针置为空。</p>
+
+<p>程序的最后，无意识的情况下又打印输出的了pTest指针，该种情况很可能在大型应用程序中，由于没有定义好相应的使用接口，用户在不知情的情况下使用了已经被释放的内存空间导致的程序运行时期的段错误，最后导致程序运行时即core掉。</p>
+
+<p>下面将会介绍怎样通过gdb调试工具查看应用程序core文件来定位程序运行错误，gdb工具中加载程序core文件可以采用gdb后加程序文件名以及相应的core文件名即可，上述程序调试过程演示如下。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs crystal"><div class="hljs-line">[developer @localhost bin]$gdb chapter0305 core.<span class="hljs-number">2839</span> /<span class="hljs-regexp">/装载程序core文件</span>
+</div><div class="hljs-line"><span class="hljs-regexp">Loaded symbols for /lib</span><span class="hljs-regexp">/tls/libc</span>.so.<span class="hljs-number">6</span>
+</div><div class="hljs-line">Reading symbols from /<span class="hljs-class"><span class="hljs-keyword">lib</span>/<span class="hljs-title">ld</span>-<span class="hljs-title">linux</span>.<span class="hljs-title">so</span>.2...<span class="hljs-title">done</span>.</span>
+</div><div class="hljs-line">Loaded symbols <span class="hljs-keyword">for</span> /<span class="hljs-class"><span class="hljs-keyword">lib</span>/<span class="hljs-title">ld</span>-<span class="hljs-title">linux</span>.<span class="hljs-title">so</span>.2</span>
+</div><div class="hljs-line"><span class="hljs-comment">#0  0x08048892 in main () at chapter0305.cpp:27</span>
+</div><div class="hljs-line"><span class="hljs-number">27</span>     cout&lt;&lt;<span class="hljs-string">"Show content:"</span>&lt;&lt;*pTest&lt;&lt;endl;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">(gdb) where            /<span class="hljs-regexp">/查看程序异常core位置</span>
+</div><div class="hljs-line"><span class="hljs-regexp">#0  0x08048892 in main () at chapter0305.cpp:27  /</span><span class="hljs-regexp">/提示程序第27行处理异常</span>
+</div><div class="hljs-line"><span class="hljs-regexp">#1  0x42015574 in __libc_start_main () from /lib</span><span class="hljs-regexp">/tls/libc</span>.so.<span class="hljs-number">6</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">(gdb) <span class="hljs-keyword">break</span> main       /<span class="hljs-regexp">/主程序入口设置断点</span>
+</div><div class="hljs-line"><span class="hljs-regexp">Breakpoint 1 at 0x804880c: file chapter0305.cpp, line 18.</span>
+</div><div class="hljs-line"><span class="hljs-regexp">(gdb) r                /</span><span class="hljs-regexp">/当前调试会话中执行程序</span>
+</div><div class="hljs-line"><span class="hljs-regexp">Starting program: /home</span><span class="hljs-regexp">/ocs/users</span><span class="hljs-regexp">/wangfeng/</span>Linux_c++<span class="hljs-regexp">/chapter03/chapter</span>0305/bin/chapter0305
+</div><div class="hljs-line">Breakpoint <span class="hljs-number">1</span>, main () at chapter0305.<span class="hljs-symbol">cpp:</span><span class="hljs-number">18</span> /<span class="hljs-regexp">/运行至第一个断点位置</span>
+</div><div class="hljs-line"><span class="hljs-regexp">18    char *pTest = NULL; /</span><span class="hljs-regexp">/提示下一行即将执行的代码</span>
+</div><div class="hljs-line"><span class="hljs-regexp">(gdb) n                /</span><span class="hljs-regexp">/单步执行程序</span>
+</div><div class="hljs-line"><span class="hljs-regexp">19    pTest = applyMemory(); /</span><span class="hljs-regexp">/下一行代码执行至申请内存方法调用</span>
+</div><div class="hljs-line"><span class="hljs-regexp">(gdb) n                /</span><span class="hljs-regexp">/单步执行程序</span>
+</div><div class="hljs-line"><span class="hljs-regexp">20    if(pTest != NULL)/</span><span class="hljs-regexp">/判断指针是否为空</span>
+</div><div class="hljs-line"><span class="hljs-regexp">(gdb) n                /</span><span class="hljs-regexp">/单步执行程序</span>
+</div><div class="hljs-line"><span class="hljs-regexp">22    strcpy(pTest,"hello!"); /</span><span class="hljs-regexp">/拷贝字符串进入指针所指存储空间</span>
+</div><div class="hljs-line"><span class="hljs-regexp">(gdb) n                /</span><span class="hljs-regexp">/单步执行程序</span>
+</div><div class="hljs-line"><span class="hljs-regexp">23    cout&lt;&lt;"Show content:"&lt;&lt;pTest&lt;&lt;endl;  /</span><span class="hljs-regexp">/输出指针所指区域存放的内容</span>
+</div><div class="hljs-line"><span class="hljs-regexp">(gdb) n                /</span><span class="hljs-regexp">/单步执行程序</span>
+</div><div class="hljs-line"><span class="hljs-regexp">Show content:hello!    /</span><span class="hljs-regexp">/打印输出其内容信息</span>
+</div><div class="hljs-line"><span class="hljs-regexp">24    delete[] pTest;  /</span><span class="hljs-regexp">/释放相应的指针所指内存区域</span>
+</div><div class="hljs-line"><span class="hljs-regexp">(gdb) n                /</span><span class="hljs-regexp">/单步执行程序</span>
+</div><div class="hljs-line"><span class="hljs-regexp">25      pTest = NULL;  /</span><span class="hljs-regexp">/将当前指针置空</span>
+</div><div class="hljs-line"><span class="hljs-regexp">(gdb) n                /</span><span class="hljs-regexp">/单步执行程序</span>
+</div><div class="hljs-line"><span class="hljs-regexp">27     cout&lt;&lt;"Show content:"&lt;&lt;*pTest&lt;&lt;endl;                           /</span><span class="hljs-regexp">/打印指针所指内容</span>
+</div><div class="hljs-line"><span class="hljs-regexp">(gdb) n                /</span><span class="hljs-regexp">/单步执行程序</span>
+</div><div class="hljs-line"><span class="hljs-regexp">Program received signal SIGSEGV, Segmentation fault.                    /</span><span class="hljs-regexp">/发现程序异常点</span>
+</div><div class="hljs-line"><span class="hljs-regexp">0x08048892 in main () at chapter0305.cpp:27</span>
+</div><div class="hljs-line"><span class="hljs-regexp">/</span><span class="hljs-regexp">/打印之前指针所指空间已经释放并且置空</span>
+</div><div class="hljs-line"><span class="hljs-regexp">27  cout&lt;&lt;"Show content:"&lt;&lt;*pTest&lt;&lt;endl;                           </span>
+</div></code></pre>
+
+<p>从上述调试应用程序core文件可以看出，gdb工具加载core文件可以通过程序名以及core文件名即可。随后通过where命令检查程序在何处出现错误，从结果来看错误发生在main函数中，通过break命令设置main函数处断点。</p>
+
+<p>当前调试会话中执行run命令运行该程序，定位至调试第一个断点处停住。随后通过next单步调试，发现程序走到最后一次打印输出该指针指向内容的时候发生了信号中断导致程序奔溃退出。因此仔细排查程序可以定位发现原来最后使用该指针之前所指向空间已经被释放。</p>
+
+<p>Linux系统下C++应用程序在运行时产生的core文件对于分析解决大型程序中程序错误非常有用，避免了在许多程序文件中逐步排查的痛苦，可以通过查看程序运行退出的core文件直接查看问题出现时候的程序代码位置，便于快速的解决问题。</p></div>

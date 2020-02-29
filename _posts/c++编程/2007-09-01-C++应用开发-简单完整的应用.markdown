@@ -1,0 +1,105 @@
+---
+layout: post
+title: C++应用开发-简单完整的应用
+categories: c++编程
+description: C++应用开发-简单完整的应用
+keywords: C++编程
+---
+<div id='preview-contents' class='note-content'>
+
+
+
+<p>通过Linux下一个最简单C++应用程序的编写与执行开始。不仅可以了解一个完整C++程序基本组成情况，还可以了解到Linux平台下程序编译的一般过程。</p>
+
+<p><strong>1.准备实例</strong> <br>
+学习计算机语言的第一个最经典是HelloWorld程序。该程序通常只有一句基本信息的打印输出功能，但是程序的本身是完整的，并且代表了大部分的程序典型结构。本小节将会通过详细剖析这样一个最简单完整的C++程序，让初学者对于C++语言基本语法使用有一个初步的认识。对于C++语言，代码源文件保存为后缀*.cpp文件。打开代码编辑器UE，代码文件名保存为chapter0401.cpp，代码源文件内容如下所示。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-comment">/**</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 源文件chapter0401.cpp</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 简单屏幕上打印信息</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-comment">//主函数入口处</span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"Hello,Welcometo c++ world!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>; <span class="hljs-comment">//屏幕上打印信息</span>
+</div><div class="hljs-line">    return0;                                  <span class="hljs-comment">//返回值0                                        </span>
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>上述程序代码主要演示如何采用C++语言实现向屏幕输出信息的功能。下面将会根据需要编译的代码文件，使用g++编译工具并组合编译命令编写makefile编译工程文件。用于最终编译生成可执行程序。最后通过ftp工具将编辑完成的代码文件、makefile文件传输至Linux服务器，供客户端访问操作。</p>
+
+<p><strong>2.编辑makefile</strong> <br>
+Linux系统下需要编译的源文件为chapter0401.cpp，相关makefile工程文件编译命令编辑如下所示。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs armasm"><div class="hljs-line"><span class="hljs-symbol">OBJECTS</span><span class="hljs-symbol">=chapter0401</span>.o
+</div><div class="hljs-line"><span class="hljs-symbol">CC</span><span class="hljs-symbol">=g</span>++
+</div><div class="hljs-line"><span class="hljs-symbol"></span>
+</div><div class="hljs-line"><span class="hljs-symbol">chapter0401:</span> $(OBJECTS)
+</div><div class="hljs-line">    $(CC)$(OBJECTS) -g -o chapter0401
+</div><div class="hljs-line"><span class="hljs-symbol">clean</span>:
+</div><div class="hljs-line">    rm -fchapter0401 core $(OBJECTS)
+</div><div class="hljs-line"><span class="hljs-keyword">submit:</span>
+</div><div class="hljs-line"><span class="hljs-keyword"></span>    <span class="hljs-meta">cp</span> -f -rchapter0401 ../<span class="hljs-keyword">bin</span>
+</div><div class="hljs-line"><span class="hljs-keyword"></span>    <span class="hljs-meta">cp</span> -f -r*.h ../<span class="hljs-meta">include</span>
+</div></code></pre>
+
+<p>上述makefile工程文件中可以看出。首先采用变量定义方式定义变量OBJECTS，用于表示程序编译中将要产生的中间object文件。随后定义变量CC表示采用编译的工具，本makefile主要采用g++编译工具，因此该变量值为g++。第三行第一个字段chapter0401为最终编译产生的目标可执行程序名，冒号之后则是产生该执行程序文件的中间工程文件名。第四行则为编译程序的命令，前两个字段采用变量替代，还原真实执行的命令为“g++ chapter0401.o –g –o chapter0401”。</p>
+
+<p>随后一部分则为makefile附件的clean功能。首先提醒make程序使用该部分功能时必须附加clean参数，之后一行则为该参数对应执行的rm删除命令，从而实现清理工作。此处清理工作所要做的主要为删除可执行程序文件、core文件以及产生的中间工程文件等。</p>
+
+<p>最后一部分则为makefile提交功能。通过submit参数命令，冒号之后的下面的行命令则为提交所要做的工作。本makefile主要提交可执行程序文件至其bin目录，并且同时提交相应程序头文件至include目录。</p>
+
+<p><strong>3.编译运行程序</strong> <br>
+ 程序代码文件以及makefile文件编辑准备完毕后，在当前shell下执行make命令，生成可执行程序文件。随后通过make submit命令提交程序文件至本实例bin目录。通过cd命令定位至实例bin目录，执行该程序文件运行结果如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs elixir"><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>make
+</div><div class="hljs-line">    g++ -c -o chapter0401.o chapter0401.cpp
+</div><div class="hljs-line">    g++ chapter0401.o -g -o chapter0401
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>make submit
+</div><div class="hljs-line">    cp -f -r chapter0401 ../bin
+</div><div class="hljs-line">    cp -f -r *.h ../<span class="hljs-keyword">include</span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>cd ../bin
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> bin]<span class="hljs-variable">$ </span>./chapter0401
+</div><div class="hljs-line">    Hello,Welcome to c++ world!
+</div></code></pre>
+
+<p>当前shell下执行make命令之后，会打印输出编译的过程供开发者查看。如果无任何错误出现，此时编译完毕后就可以查看到当前目录下的可执行程序文件了。通过make命令附加submit参数执行了make文件的提交功能。将生成的可执行文件以及头文件提交至相应目录。最后通过在bin目录下执行该程序输出预期打印结果。</p>
+
+<p>4.程序剖析 <br>
+本实例程序实现功能非常简单，主要实现在终端显示设备中打印输出字符串信息的功能。下面将会针对本实例实际代码，来介绍一个完整的C++应用程序的基本组成情况。首先实例程序起始行代码如下。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div></code></pre>
+
+<p>include预处理器指令告诉编译器，该应用程序必须使用到C++标准库中iostream这个头文件中的一些方法和类型定义。正常情况下需要使用库方法时，必须包含相应的头文件定义。随后的using指令表示需要使用名称空std下的相关名称定义。关于名称空间后续会详细讲述。此处需要注意，一个C++程序通常必须包含上述两行基本代码，才能实现C++基本应用功能。</p>
+
+<p>C++历史版本头文件定义方式在最新的语言标准中依然支持。与上述提供的功能类似，同样也可以使用如下改行代码来达到上述两行代码的同样效果，该代码如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs autoit"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream.h&gt;</span></span>
+</div></code></pre>
+
+<p>该类头文件写法在很多的C++老的应用程序中很常见。由于C++语言是基于C语言之上发展起来的，那么同样C语言中一些常用的函数库，在C++中也可以直接使用。开发者只需要将其中.h去掉，在其前面加上c即可。例如，C语言中数学计算头文件math.h改为cmath，字符串头文件string.h改为cstring。不过本书并不建议使用该种C/C++函数库混用的方式来开发C++应用程序，建议使用统一标准的C++开发方式。</p>
+
+<p>实例中主程序main函数作为应用程序的入口部分，任何一个可执行程序都从将这里作为程序运行的入口点，串行的执行相应的代码。实例中main()函数名之前的int表示该程序执行完毕后会返回一个整型的值给操作系统。main()函数括号中可以设置相应的参数，后续的章节中会详细描述该参数的使用情况。当前的程序不需要传入任何参数，因此可以空着，表示程序不接受任何参数处理。</p>
+
+<p>程序最后一行是一个return返回语句，即程序处理完后返回整数0。通常主程序中返回0表示程序正常结束。对于标准C++程序，即使没有指定return语句，main函数也会传回0表示程序正常执行。</p>
+
+<p>实例中最主要的应用处理代码即为实现打印输出功能的部分，该部分功能代码如下所示。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"Hello,Welcome to c++world!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div></code></pre>
+
+<p>C++程序中，每一个语句都以分号结束。cout为标准C++输出流对象，&lt;&lt;为输出流重载的输出操作符。关于输出流部分知识详细的讲述将会在后续章节中。此处只需要了解如果需在屏幕上打印显示信息，可以使用如上的方式来实现即可。最后endl表示打印信息的换行符，否则的话在显示字符信息之后的打印信息会直接显示于当前信息文字之后，没有实现输出信息换行。那么对于输出的信息，此处应该是字符串信息，所以需要采用双引号来包括。</p>
+
+<p>到目前为止，通过上面的剖析对一个最简单的C++程序应该已经有了基本的概念。大致了解了C++程序的基本组成部分以及该部分的基本使用方法。下面将会就C++语言的基本语法知识作一个简单全面的介绍。</p></div>

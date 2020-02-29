@@ -1,0 +1,236 @@
+---
+layout: post
+title: C++应用开发-文件系统编程-文件目录操作封装
+categories: c++编程
+description: C++应用开发-文件目录操作封装
+keywords: C++编程
+---
+<div id='preview-contents' class='note-content'>
+
+
+
+<p>Linux系统下目录也是文件的一种，作为特殊文件，Linux系统也提供了相应的系统调用来操作文件系统中的目录。目录操作主要包含目录创建、删除、读取与定位几个部分，目录基本操作在实际应用程序中也常有应用。比如电信行业中计费系统处理，由于资料文件关联性经常需要扫描相应处理的数据目录，查看文件是否到齐后才能统一处理。此过程中经常涉及文件目录读取扫描操作。</p>
+
+<p>另外一个C++应用程序实现Linux下标准文件系统操作也离不开针对系统目录文件系统调用的封装，由于考虑到通用以及功能单一性，系统调用提供的接口在应用中可以采用C++应用程序封装应用于实际更加具体的功能需求处理。</p>
+
+<p>下面将会简单介绍Linux系统下针对目录文件提供的基本操作支持情况，最后会通过一个扫描目录实例程序来演示目录操作在实际应用程序中的使用。Linux系统针对目录操作提供的方法基本原型如下。</p>
+
+<p>//目录文件创建</p>
+
+<pre><code class="language-css">
+    #include &lt;sys/stat.h&gt;
+    #include &lt;sys/types.h&gt;
+    int     mkdir(constchar *pathname,mode_t mode);
+</code></pre>
+
+<p>//目录文件打开</p>
+
+<pre><code class="language-css">
+    #include &lt;sys/types.h&gt;
+    #include &lt;dirent.h&gt;
+    DIR *opendir(const char *name);
+</code></pre>
+
+<p>//目录文件读取</p>
+
+<pre><code class="language-css">
+    #include &lt;unistd.h&gt;
+    #include &lt;linux/dirent.h&gt;
+    #include &lt;linux/unistd.h&gt;
+    int     readdir(unsignedint fd,struct dirent *dirp,unsigned int count );
+</code></pre>
+
+<p>//目录文件关闭</p>
+
+<pre><code class="language-css">
+    #include &lt;sys/types.h&gt;
+    #include &lt;dirent.h&gt;
+    int     closedir(DIR*dirent);
+</code></pre>
+
+<p>//目录文件删除</p>
+
+<pre><code class="language-css">
+    #include &lt;unistd.h&gt;
+    int   rmdir(constchar *pathname);
+</code></pre>
+
+<p>//获取当前工作目录</p>
+
+<pre><code class="language-css">
+    #include &lt;unistd.h&gt;
+    char *getcwd(char*buf,size_t size);
+    char *get_current_dir_name(void);
+    char *getwd(char *buf);
+</code></pre>
+
+<p>上述系统调用可能在不同的内核中相关接口稍有变化，笔者当前使用的Linux系统为32位内核版本2.4的redhat操作系统。上述系统调用根据man查询系统中提供的帮助说明页列出，由于目录也作为文件的一种特殊形式处理，那么文件的相关操作在目录上同样存在。</p>
+
+<p>常见的目录操作包含上述六个，分别为目录创建、打开、读取、关闭、删除以及获取目录操作。首先目录文件的创建函数，该方法在系统中与shell下提供的mkdir命令相同，用于根据函数参数中指定的目录名pathname以及指定的目录访问权限mode，在当前工作目录下创建一个新目录。如果指定的目录已经存在则该操作会失败。该方法成功创建一个目录返回整型值为0，否则为-1，相应的标准错误值会写入errno中可供诊断。</p>
+
+<p>目录操作的第二个方法为打开文件操作，该方法传入参数为一个指定的目录文件名，通过内部处理打开指定目录文件，并且返回一个指向目录结构DIR的指针，类似于文件打开的描述符，该指向目录结构体指针对应着一个特定的打开的目录。该方法成功打开目录文件则返回相应的指向DIR结构体指针，否则返回NULL，相应的错误号放入errno。</p>
+
+<p>目录文件读取，用于扫描当前目录下基本信息，通常目录文件下基本信息使用最多的为列出当前目录下的文件。实际软件文件处理中获取当前指定目录下文件信息有着广泛应用，比如在电信行业经常需要根据业务完整性让相应传来的文件资料在一定数量之后才开始操作以及一些文件接口操作中等都会使用到获取当前目录信息操作。目录作为特殊文件的一种，上述方法通过相应的文件描述符fd，将指定目录下的内容读取到目录信息结构体指针dirp所指向的空间，供后续处理。该方法成功执行返回整型数0，否则返回-1，相应标准错误写入符号errno中。</p>
+
+<p>目录创建、打开、读取都完成之后，作为一个良好的编程习惯，自然不能忘记关闭已经打开的目录文件。方法主要参数为指向目录信息结构体指针dirent，根据获取当前目录的结构体信息指针，关闭当前指针的目录。该方法成功关闭文件返回整型值为0，否则返回-1，错误值写入errno。</p>
+
+<p>目录删除函数rmdir，该方法根据传入的目录名，删除指定存在的目录。需要注意的是该目录必须为空目录，即下层不存在普通文件或者目录数据。该方法成功执行返回整型值0，否则返回-1，相应的标准错误写入错误符errno。</p>
+
+<p>应用程序开发中时长可能需要使用到Linux系统下当前的工作目录路径，Linux系统提供了三种方法来实现需要的工作目录获取功能。方法一getcwd共有两个参数，参数一为指向缓冲区定义的指针，用于存放获取到的工作目录绝对路径。参数二用于指定当前buf所指缓冲区大小，使用时需要注意的是缓冲区的指定必须足够存放获取到的工作路径。如果缓冲区指针指向的空间为NULL，该方法会根据传入的size参数来自动分配内存，如果指定的size也为0，则方法会根据工作目录字符串长度来决定使用malloc分配的内存空间，应用程序使用完后可以使用对应free释放资源。该方法成功调用将获取到的工作目录路径存放到指定的缓冲区中，返回自动分配的字符串指针，否则返回NULL，错误值写入errno。</p>
+
+<p>获取工作目录的第二个方法为get_current_dir_name，该方法为GNU下扩展支持。如果系统环境变量中配置了pwd命令，那么该方法内部将会使用malloc动态定义一个足够大的数组空间用于存放获取到的当前工作目录路径名，方法成功调用后会直接将工作目录路径名返回。</p>
+
+<p>第三个获取工作目录的方法由BSD支持定义，该方法不会使用动态内存申请空间来存放获取到的工作路径。文件系统内部定义维护一个最大路径长度PATH_MAX，根据传入的buf指针，该方法会将获取的路径放入缓冲区中。需要注意的是PATH_MAX依赖于不同的文件系统定义，从可移植以及安全的角度来讲，该方法并不被推荐使用。</p>
+
+<p>介绍完毕上述Linux系统针对目录文件提供的常见操作方法，下面将会通过一个应用实例来演示目录操作在实际开发中的应用情况，更多的目录操作可以根据Linux系统man获取。实例代码编辑如下。 <br>
+<strong>1.准备实例</strong> <br>
+打开UE工具，创建新的空文件并且另存为chapter1802.cpp。该代码文件随后会同makefile文件一起通过FTP工具传输至Linux服务器端，客户端通过scrt工具访问操作。程序代码文件编辑如下所示。</p>
+
+<pre><code class="language-css">
+    /**
+    * 实例chapter1802
+    * 源文件chapter1802.cpp
+    * 目录操作实例
+    */
+    #include
+    #include
+    #include &lt;unistd.h&gt;
+    #include &lt;sys/types.h&gt;
+    #include &lt;sys/stat.h&gt;
+    #include &lt;dirent.h&gt;
+    #include
+    using namespace std;
+
+    /**
+     *获取Linux当前工作目录.
+     *@param     path           输入处理文件名参数.
+     *@return 处理成功返回0，否则返回-1
+     */
+    int getLinuxCurrentDirectory(string&amp; path)
+    {
+         charbuffer[512];
+         if(getcwd(buffer, 512) == 0)
+         {
+                   return-1;
+         }
+        path = string(buffer);
+        return0;
+    }
+
+    /**
+     *扫描并获取当前目录下的文件.
+     *@param     path                             输入处理文件名参数.
+     * @param       directory_file_list      输入文件列表list变量.
+     *@return 处理成功返回0，否则返回-1
+     */
+    int listLinuxDirectory(const string&amp;path,list &amp; directory_file_list)
+    {
+        directory_file_list.clear();
+        DIR* pDir = opendir(path.c_str());
+
+        if (pDir == 0)
+        {
+            return-1;
+        }
+
+        structdirent* pDirent;
+        while( (pDirent = readdir(pDir)) != NULL)
+        {
+            stringfoundPath = string(pDirent-&gt;d_name);
+            if(foundPath != (".") &amp;&amp; foundPath != (".."))
+            {
+                directory_file_list.push_back(foundPath);
+            }
+        }
+
+        closedir(pDir);
+        return0;
+    }
+
+    /*主程序入口*/
+    int main()
+    {
+         stringpath;               //定义字符串变量，表示文件路径名
+         listdirectoryfileList;  //定义list容器变量，存放目录文件列表
+         list::iteratoriter;        //定义容器遍历指针，用于遍历其中数据
+         if(getLinuxCurrentDirectory(path)&lt; 0)  //获取当前工作路径
+         {
+            cout&lt;&lt;"Getcurrent work Directory fail!"&lt;&lt;endl;   //获取工作路径失败提示信息
+         }
+         else
+         {
+            cout&lt;&lt;"Currentwork path:"&lt;&lt;path&lt;&lt;endl; //否则打印成功获取的工作路径名
+         }
+         cout&lt;&lt;”pleaseinput deal path:”&lt;&lt;endl; //提示输入需要获取文件列表的目录名
+         cin&gt;&gt;path;                                            //输入路径名
+
+         if(listLinuxDirectory(path,directoryfileList)&lt; 0) //扫描并获取指定目录下的文件
+         {
+            cout&lt;&lt;"Listunder Directory file fail!"&lt;&lt;endl; //获取指定目录下文件失败提示信息
+         }
+         else
+         {
+            cout&lt;&lt;"currentDirectory:"&lt;&lt;endl;  //打印输出当前目录文件提示
+            for(iter= directoryfileList.begin();iter != directoryfileList.end();iter++) //循环遍历文件列表容器
+            {
+                cout&lt;&lt;*iter&lt;&lt;""&lt;&lt;*(iter++)&lt;&lt;endl;                       //打印输出当前目录下的文件
+            }
+        }
+        return0;
+}
+</code></pre>
+
+<p>本实例主要演示了Linux下目录基本操作使用情况，程序主要由主函数与两个目录基本操作函数构成，两个目录操作函数分别实现获取当前工作目录和扫描获取指定目录下文件列表的工作，具体程序讲解见程序剖析部分。</p>
+
+<p>2.编辑makefile <br>
+Linux系统平台下需要编译源文件为chapter1802.cpp，相关联工程makefile文件编辑内容如下所示。</p>
+
+<pre><code class="language-css">
+OBJECTS=chapter1802.o
+CC=g++
+
+chapter1802: $(OBJECTS)
+    <span class="mathjax-replacement" rel="f15d8bf79a4b88b01d73201fcf0be9eb">$(CC)$</span>(OBJECTS) -g -o chapter1802
+
+clean:
+    rm -fchapter1802 core $(OBJECTS)
+
+submit:
+    cp -f-r chapter1802 ../bin
+    cp -f-r *.h ../include
+</code></pre>
+
+<p>上述makefile文件套用了上个实例模板。之所以其中采用变量定义替换的方式，目的就是为了方便编译程序的替换。从makefile工程文件中可以看出，布局是相同的。不同的地方仅仅是代码的文件名、生成可执行程序的名称等，大大方便了每次都要重新编写一遍编译命令的编辑方式。</p>
+
+<p>3.编译运行程序 <br>
+当前shell下执行make命令，编译生成可执行程序文件，通过make submit命令提交程序文件至本实例bin目录，通过cd命令定位至实例bin目录，该程序运行结果如下所示。</p>
+
+<pre><code class="language-css">
+[developer @localhost src]$make
+    g++    -c-o chapter1802.o chapter1802.cpp
+    g++ chapter1802.o -g -o chapter1802
+
+[developer @localhost src]$make submit
+    cp -f -r chapter1802 ../bin
+    cp -f -r *.h ../include
+
+[developer @localhost src]$cd ../bin
+[developer @localhost src]$./chapter1802
+    Current workpath:/home/ocs/users/wangfeng/Linux_c++/chapter18/chapter1802/bin
+    input deal path:
+    /home/ocs/users/wangfeng/Linux_c++/chapter18/chapter1802/src
+    current Directory:
+    chapter1802.o makefile
+</code></pre>
+
+<p>4.程序剖析</p>
+
+<p>本实例中主要实现Linux系统下两个目录相关操作的封装，一个为获取当前工作目录，另一个根据获取到的当前工作目录情况来列出当前工作目录下的所有目录以及文件并存放在相应的list容器中。首先实例中封装实现的getLinuxCurrentDirectory方法操作，该方法主要通过系统调用getcwd实现获取当前工作目录的功能。</p>
+
+<p>该方法接口提供一个string型的字符串对象path，作为参数传入方法内部。该方法内部首先定义一个缓冲区buffer，大小为512字节，用于存放获取到的工作目录路径名。随后调用getcwd方法，将缓冲区变量名以及对应的大小传入，获取成功后将缓冲区中的工作路径名强制转换为string类型赋给path，供函数接口外部使用。该方法执行成功返回0，否则返回-1表示获取工作目录失败。</p>
+
+<p>第二个目录操作方法接口listLinuxDirectory主要用于获取当前指定目录下的文件，包括目录文件与普通文件。该方法主要两个参数，第一个参数path用于传入指定的路径名，第二个参数则为STL中list容器对象，主要用于存放获取到的指定目录下的文件。该方法的内部首先将传入的list容器调用clear方法清空，然后调用opendir方法根据传入的指定路径名path。打开目录操作返回一个DIR对象指针，随后判断该指针是否为空，为空则直接返回-1。</p>
+
+<p>定义目录结构信息结构体dirent对象指针pDirent，之后通过一个while循环，该循环内通过调用readdir函数，以读取打开的目录对应的操作返回结果判断为条件。如果读取总是成功，即当前目录下存在文件或目录，则执行while循环体内部代码，否则目录内容读取完毕则退出循环体。</p>
+
+<p>该方法while循环体内部，每当读取到相应内容后，将返回结果给结构体信息对象指针pDirent，随后将该指针指向的目录结构体信息中的成员d_name值返回给字符串对象foundPath，随后判断读取到的内容是不是当前目录下“.”“..”两个目录，如果不是则将其放入对应的目录内容列表中。所有目录内容都读取完毕后，调用closeDir方法根据指向目录的指针关闭打开的当前目录。</p></div>

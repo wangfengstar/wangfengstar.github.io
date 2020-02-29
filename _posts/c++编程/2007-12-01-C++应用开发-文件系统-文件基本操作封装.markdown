@@ -1,0 +1,267 @@
+---
+layout: post
+title: C++应用开发-文件系统编程-文件基本操作封装
+categories: c++编程
+description: C++应用开发-文件基本操作封装
+keywords: C++编程
+---
+<div id='preview-contents' class='note-content'>
+
+
+
+<p>Linux系统本身设计类Unix而来，系统由C语言设计实现。同样Linux也支持丰富的底层系统调用库提供给应用程序的文件操作处理。事实上C++语言自身许多类库的方法的封装，内部基本都采用封装系统调用提供统一简洁便利的接口方式。对于Linux系统，针对文件操作除了提供系统方法操作以外，C语言也提供了标准文件操作库，而C++语言由于基于C语言发展而来，因此C++文件编程除了本身提供的标准文件库以外，也支持系统文件操作API与C语言标准文件库。本章主要介绍Linux系统下针对文件I/O提供的系统调用方法，了解Linux系统针对文件操作提供的底层支持，有助于增加对Linux系统下文件处理的底层理解。</p>
+
+<p><strong>1.Linux文件系统简介</strong> <br>
+Linux系统支持多种文件系统，比如基本的日志文件系统、虚拟文件系统以及Linux内核针对实际文件系统的支持。此为Linux系统基本重要特征之一，包容多种文件系统意味着可以与更多的其它操作系统很好的并存。一个完整的文件系统操作主要由文件属性、文件系统的属性以及目录操作、文件操作等构成，本小节主要针对Linux系统的文件系统基本结构操作作简单全面的介绍。</p>
+
+<p>1）Linux系统文件基本类型 <br>
+Linux系统文件类型与文件名不同，大部分应用中使用的是普通文件操作。Linux系统中常见的文件类型有普通文件、目录、字符设备文件、块设备文件、符号链接文件等。下面将会就以上不同类别的文件作一个简单的介绍说明。</p>
+
+<p>不同的文件类型在Linux系统中采用不同的符号表示，普通文件使用第一个‘-’符号表示，当前Linux系统shell下使用ll –lst命令列出工作目录下所有文件，该命令操作结果如下所示。</p>
+
+<pre><code class="language-css">
+[developer@localhost c]$ ll -lst
+-rwx------    1root    root      1051   Sep  9 23:09  testLocation.cpp
+-rwx------    1root    root      1051   Sep  9 22:01 testLocation.cpp.bak
+-rwx------    1root    root      613     Apr28 15:44 testmap.cpp
+-rwx------    1root    root      246     May22 08:34testString.cpp
+drwx------   1root    root      0         Sep1 23:28   testsuanfa
+</code></pre>
+
+<p>上述ll –lst命令列出的文件中第一个符号为‘-’表示当前操作的文件为普通文件。上述ll –lst命令列出当前目录下文件情况。结果中第一列为该文件属性说明，第二列为文件数量说明，第三列为文件的拥有者，第四列则为文件所属的用户组，第五列为文件大小说明，第六列为文件创建时间以及最后一列为文件名称说明。</p>
+
+<p>上述命令结果基本说明针对普通文件、目录文件与字符设备文件等都有同样的说明。下面将会通过普通文件来说明Linux系统下文件属性等相关信息情况。命令ls –lst结果下文件将会有七列说明项，第一项主要用于显示文件的属性，该属性占用10个字节分别由一个文件类型的标识符与三组文件权限说明组成。文件属性说明中第一个字符为文件类型标识符，‘-’表示普通文件、‘d’表示目录文件、‘c’表示字符设备文件、‘b’块设备文件以及‘s’表示网络通信中的套接口文件。</p>
+
+<p>随后跟着三组文件权限属性说明，每个分组的权限属性为三个字符表示，如第一个分组表示文件拥有者针对文件的权限，第二个分组同样为三位字符组成表示同属于一个组的用户对该文件访问权限，第三个分组表示其它用户对该文件的权限说明。而Linux系统中对文件的操作权限有三种说明，使用字符r、w、x分别表示操作文件可读、可写以及可执行。</p>
+
+<p>第二项表示文件数量，需要注意的是如果当前文件为目录，则该项数量表示当前目录下的文件数；第三项与第四项则表示当前文件的用户拥有者与文件所属的用户组；第五列为文件的大小说明，主要以字节为单位表示当前文件的大小。第六列为文件创建时间说明，其时间说明分别为月、日与年。最后一列为文件的文件名，在Linux系统下会根据不同类型的文件显示为不同颜色表示。</p>
+
+<p>上述针对普通文件属性等描述对于目录文件、设备文件、符号链接文件等都适用，仅仅在文件详细信息描述中采用第一项第一个字符来表示，其余所有的属性说明都相同。其中目录文件为Linux系统组织文件的一种特殊文件，而Linux系统从前面介绍来看也是通过目录组织文件分层来表示的。另外Linux系统将外部设备看作文件来管理使用，用户操作外部设备如同操作普通文件一样简单方便。</p>
+
+<p>设备文件主要包含两种形式，一种为字符设备文件主要为打印机、终端等一类设备的文件表示，通常这类文件可以使用字节流方式操作。另一种为块设备文件，主要如存储磁盘等一类的设备，可以作为块文件随机访问读写。Linux系统如同Unix系统将一切都可以看作文件来操作，Linux系统下针对不同外设以及存储设备存在多种不同类型文件，这些不同类型文件有着相当专业的用途，实际软件应用中通常操作文件系统中普通文件应用比较常见，另外在网络通信中套接口文件等也比较常见。</p>
+
+<p>2）Linux系统文件属性</p>
+
+<p>从上述小结文件介绍来看，每类文件都有其基本属性定义，这些属性主要包含文件类型、访问权限、文件属主、文件属组以及文件长度与访问、修改时间等。Linux内核中针对文件属性定义维护着一个属性结构体stat，该结构体中不同数据成员来分别表示所定义文件实例相关的属性，结构体stat定义如下。</p>
+
+<pre><code class="language-css">
+struct stat
+
+{
+    dev_t         st_dev;        //文件设备
+    ino_t          st_ino;        //文件节点号
+    mode_t      st_mode;    //文件类型与权限信息
+    nlink_t       st_nlink;    //文件符号链接数
+    uid_t          st_uid;      //文件用户ID
+    gid_t          st_gid;      //文件属组ID
+    dev_t         st_rdev;     //设备文件号
+    off_t           st_size;     //文件大小
+    blksize_t    st_blksize;  //最大I/O块长度
+    blkcnt_t     st_blocks;   //分配给文件的块单元数量，每个单元为512字节
+    time_t       st_atime;    //文件最后一次访问时间
+    time_t       st_mtime;    //文件最后一次内容修改时间
+    time_t       st_ctime;    //文件结构最后一次修改时间
+};
+</code></pre>
+
+<p>Linux系统针对属性结构体提供了相应的属性操作系统调用方法，用于在实际应用程序中根据处理需要获取、修改相应操作文件的属性。系统调用文件属性操作主要包含三个函数，系统中方法原型如下。</p>
+
+<pre><code class="language-css">
+    #include &lt;sys/types.h&gt;
+    #include &lt;sys/stat.h&gt;
+    #include &lt;unistd.h&gt;
+    int stat(const char* file_name,struct stat*buf);
+    int fstat(int filedes,struct stat *buf);
+    int lstat(const char *file_name,struct stat*buf);
+</code></pre>
+
+<p>上述三个系统调用函数有一个共同点即离不开文件属性结构体的定义，通常应用程序中需要在外部定义文件属性结构体，然后作为参数将其对象指针传入进去，内部通过传入指定的文件名或者文件描述符将该文件的属性取到对应的结构体中，此时获取属性的结构体即可以在外部使用。</p>
+
+<p>函数stat主要根据指定需要获取属性的文件名file_name参数，从而获取该文件对应的属性。而fstat是根据文件打开操作返回的文件描述符来操作获取对应文件属性的，lstat函数主要用于根据连接文件名获取到对应的文件属性结构信息。另外三个系统调用成功处理返回值为0，否则返回-1，相应标准错误存放在errno中。</p>
+
+<p>下面将会通过一个C++封装获取文件属性信息接口应用程序，演示C++程序在实现文件系统时的基本操作封装使用情况，该程序将会充分演示文件属性系统调用的使用方法。该实例代码编辑如下所示。</p>
+
+<p>a.准备实例代码源文件 <br>
+打开UE工具，创建新的空文件并且另存为chapter1801.cpp。该代码文件随后会同makefile文件一起通过FTP工具传输至Linux服务器端，客户端通过scrt工具访问操作。程序代码文件编辑如下所示。</p>
+
+<pre><code class="language-css">
+/**
+* 实例chapter1801
+* 源文件chapter1801.cpp
+* 文件属性处理实例
+*/
+    #include
+    #include &lt;sys/types.h&gt;
+    #include &lt;sys/stat.h&gt;
+    #include &lt;unistd.h&gt;
+    using namespace std;
+
+/**
+*文件属性枚举定义.
+*内部定义几种文件基本属性标记值.
+*/
+enum FileAttribute {Exists = 0x01, //文件存在
+    RegularFile= 0x02, //普通文件
+    Directory = 0x04 , //文件目录
+    ReadOnly = 0x10}; //文件只读
+
+/**
+*获取当前文件最后修改时间.
+*@param path 输入处理文件名参数.
+*@param time 输入时间结构体变量.
+*@return 处理成功返回0，否则返回-1
+*/
+int getFileLastModifiedTime(const string&amp;path, time_t&amp; time)
+{
+    structstat myStat;
+    if(stat(path.c_str(), &amp;myStat) &lt; 0)
+    {
+        return-1;
+    }
+    time= myStat.st_mtime;
+    return0;
+}
+
+/**
+*获取当前文件长度.
+*@param path 输入处理文件名参数.
+*@return 处理成功返回文件长度
+*/
+size_t getFileLength(const string&amp; path)
+{
+    structstat myStat;
+    if(stat(path.c_str(), &amp;myStat) == 0)
+    {
+        returnmyStat.st_size;
+    }
+    return0;
+}
+
+/**
+*获取当前文件基本类型属性.
+*@param   path  输入处理文件名参数.
+*@return 处理成功返回文件属性标记结果
+*/
+int getFileAttributeFlags(const string&amp;path)
+{
+    structstat myStat;
+    if(stat(path.c_str(), &amp;myStat) == 0)
+    {
+        intret = Exists;
+        if(myStat.st_mode &amp; S_IFDIR) ret |= Directory;
+        if(myStat.st_mode &amp; S_IFREG) ret |= RegularFile;
+        if((myStat.st_mode &amp; S_IWUSR)==0) ret |= ReadOnly;
+        return ret;
+    }
+    return0;
+}
+
+/*主程序入口*/
+int main()
+{
+    string path_name; //定义文件路径全名
+    int result; //定义标记变量
+    cout&lt;&lt;"Pleaseinput path path_name:"&lt;&lt;endl; //提示从键盘输入文件路径全名
+    cin&gt;&gt;path_name; //输入文件路径全名
+    cout&lt;&lt;"Thispath_name is:"&lt;&lt;endl; //提示输入文件名属性
+    result= getFileAttributeFlags (path_name); //调用文件基本属性求取方法，将返回结果赋给标记变量
+    if((result&amp; RegularFile) != 0)//将结果标记变量与文件属性中普通文件项作与运算
+    {
+        cout&lt;&lt;"Thisis a regular file!"; //如果表达式计算为非零值，表明输入的文件为普通文件
+    }
+    elseif((result &amp; Directory) != 0)//将结果标记变量与文件属性中目录文件项作与运算
+    {
+        cout&lt;&lt;"Fileis a directory!";//如果表达式计算为非零值，表明输入的文件为目录文件
+    }
+
+  if((result&amp; ReadOnly) != 0)//将结果标记变量与文件属性中的只读属性项作与运算
+  {
+      cout&lt;&lt;"AndFile is read-only!"&lt;&lt;endl;//如果表达式计算为非零值，表明输入的文件为只读
+  }
+  else
+  {
+    cout&lt;&lt;"AndFile isn't read-only!"&lt;&lt;endl; //否则为非只读文件
+  }
+
+  time_ttime;   //定义时间结构变量
+  if(!getFileLastModifiedTime(path_name,time)) //调用获取文件最后修改方法，传入时间变量与文件名
+  {
+      cout&lt;&lt;"FileModify time:"&lt;&lt;endl; //提示输出文件修改时间
+      structtm *w;
+      charbuffer[15]; //定义缓冲区，并设定为15个字节大小
+      w= localtime(&amp;time);//传入时间结构变量，调用本地时间求取方法
+      sprintf(buffer,"%4d%02d%02d%02d%02d%02d",  
+                w-&gt;tm_year+ 1900,w-&gt;tm_mon + 1, w-&gt;tm_mday,
+                w-&gt;tm_hour,w-&gt;tm_min, w-&gt;tm_sec);
+      cout&lt;&lt;buffer&lt;&lt;endl;
+  }
+
+  size_tsize;       //定义size_t型变量，表示文件的长度
+  size= getFileLength (path_name);  //调用获取文件长度方法，根据传入文件名计算文件大小
+  cout&lt;&lt;"Filesize:"&lt;&lt;size&lt;&lt;endl;     //打印输出文件大小
+  return0;
+}
+</code></pre>
+
+<p>本实例主要演示文件属性基本操作处理使用情况，程序主要包含主函数与三个操作函数，三个操作函数分别用于获取当前文件最后修改时间（getFileLastModifiedTime）、获取当前文件长度（getFileLength）以及获取当前文件基本类型属性（getFileAttributeFlags），具体程序解释见程序剖析部分。</p>
+
+<p>b.编辑makefile <br>
+Linux系统平台下需要编译源文件为chapter1801.cpp，相关联工程makefile文件编辑内容如下所示。</p>
+
+<pre><code class="language-css">
+OBJECTS=chapter1801.o
+
+CC=g++
+
+chapter1801: $(OBJECTS)
+    <span class="mathjax-replacement" rel="f15d8bf79a4b88b01d73201fcf0be9eb">$(CC)$</span>(OBJECTS) -g -o chapter1801
+
+clean:
+    rm -fchapter1801 core $(OBJECTS)
+
+submit:
+    cp -f-r chapter1801 ../bin
+    cp -f-r *.h ../include
+</code></pre>
+
+<p>上述makefile文件套用前面的模板格式，主要替换了代码文件、程序编译中间文件、可执行程序等。在编译命令部分-g选项的加入，表明程序编译同时加入了可调式信息。</p>
+
+<p>c.编译运行程序 <br>
+当前shell下执行make命令，生成可执行程序文件，随后make submit命令提交程序文件至本实例bin目录下，通过cd命令定位至实例bin目录，执行该程序运行结果如下所示。</p>
+
+<pre><code class="language-css">
+[developer@localhost src]$make
+    g++ -c-o chapter1801.o chapter1801.cpp
+    g++ chapter1801.o -g -o chapter1801
+
+[developer@localhost src]$make submit
+    cp -f -r chapter1801 ../bin
+    cp -f -r *.h ../include
+[developer@localhost src]$cd ../bin
+[developer@localhost src]$pwd
+    /home/ocs/users/wangfeng/Linux_c++/chapter18/chapter1801/bin
+
+[developer@localhost src]$./chapter1801
+    Please input path path_name:
+    /home/ocs/users/wangfeng/Linux_c++/chapter18/chapter1801/bin/chapter1801
+    This path_name is:
+    This is a regular file!And File isn'tread-only!
+    File Modify time:
+    20090107061638
+    File size:16051
+</code></pre>
+
+<p>d.程序剖析 <br>
+本实例主要采用C++应用程序封装文件属性系统调用stat实现相关文件属性处理功能，上述主要涉及文件属性处理应用的三个操作，分别为指定文件最后修改时间的获取、指定文件大小获取以及文件基本类型属性的获取。</p>
+
+<p>上述三个方法分别采用C++语言封装成三个操作函数接口，分别为getFileLastModifiedTime、getFileAttributeFlags与getFileLength。方法接口getFileLastModifiedTime主要对外提供两个参数，第一个为指定文件的路径全名、第二个为需要获取的时间变量，该方法内部主要根据stat方法是用获取其数据成员st_mtime表示文件最后修改时间，成功获取则返回0，否则系统调用不成功返回-1。</p>
+
+<p>第二个方法接口操作为getFileLength，用户获取指定文件的长度，该方法提供一个参数入口即为需要操作的文件路径全名，根据传入的路径全名来调用stat方法获取其结构体成员st_size，并直接返回，否则返回整型值0。</p>
+
+<p>最后方法接口getFileAttributeFlags主要用于判断指定文件属于普通文件还是目录文件，以及判断当前目录或者文件是否为只读权限。该方法接口提供一个参数为指定文件全名，根据输入的文件全名，调用stat方法，获取指定文件的基本属性。随后通过采用其属性st_mode文件类型与权限字段信息来判断是否为文件、目录并且是否为只读权限。该方法通过定义全局枚举来标识相应的文件类型与权限，该枚举中主要4个变量说明，分别表示文件存在、普通文件、目录以及只读权限。</p>
+
+<p>方法内部调用stat获取文件属性后，将其属性结构体字段中st_mode将与文件类型宏定义常量符以及权限常量符进行&amp;运算，如果结果为真证明指定的文件拥有该项属性，从而外部调用判断可以得出指定文件类型以及只读权限的信息。该方法调用成功，返回大于0的整型数，否则直接返回0。</p>
+
+<p>此处需要注意的是Linux系统针对文件属性中相关类别定义了一系列的宏常量符号，分别表示文件属性中不同的类别信息。比如针对文件类型就有S_IFREG（普通文件）、S_IFDIR（目录文件）、S_IFBLK（块文件）以及S_IFCHR（字符文件）等标志值。另外针对文件属性中访问权限也提供了一系列的宏常量符号定义，比如S_IRUSR（文件用户读取权限）以及S_IWUSR（文件用户写权限）等。具体符号定义与值得说明可以通过查看系统中stat.h文件即可。</p>
+
+<p>实例主程序中，定义相关变量，随后调用获取文件类型属性方法接口，根据传入的文件全名外部进行判断处理，将调用该方法结果与相应的标识进行&amp;运算，如果结果成真则表示为对应文件类型以及是否为只读权限。之后定义时间变量，调用获取修改时间方法，由于该变量中存放的是长整型时间，不方便查看，所以根据需要进行了时间格式化处理，使之按照正常的顺序格式显示。最后调用文件长度获取方法直接返回指定文件的大小。</p></div>

@@ -1,0 +1,615 @@
+---
+layout: post
+title: C++应用开发-进程通信之共享内存
+categories: c++编程
+description: C++应用开发-进程通信之共享内存
+keywords: C++编程
+---
+<div id='preview-contents' class='note-content'>
+
+<p>共享内存首先为一块实际物理内存，该块物理内存地址被影射到对应的不同进程地址空间中，如此不同的进程都可见共享内存中的所有数据。由于不同的进程操作同一块共享内存时，需要保证同一时间的操作不能搞乱内存中的数据，一定程度上共享内存操作需要增加进程操作同步机制。</p>
+
+<p>从操作系统原理角度来讲，某种形式的资源竞争为防止造成死锁等异常情况，需要一种同步机制来保证竞争相同资源时能够有序进行。共享内存使用中同步机制的某种形式上增加了该种进程通信方式的难度，但是从大型软件系统角度讲，共享内存的应用往往是进程通信的最好选择，尤其是需要处理大数据量的分布式实时系统。</p>
+
+<p>Linux系统下针对共享内存应用支持两种不同的标准，即Posix共享内存以及SystemV共享内存两种不同的方式。下面将会通过一个简单的Linux系统IPC应用图讲述两种共享内存标准方式的异同，两种标准方式对于Linux系统来讲都能够很好的支持应用，IPC应用发展见图所示。</p>
+
+
+
+<p><img longdesc="./c++01.png" alt="Alt text" title="" type="image/png" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAekAAADnCAIAAAC10TkEAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAB3RJTUUH4goKFhwcWIg2PAAAPtNJREFUeNrt3XlYk1faMPATFo0mQFAxidqCRhGdVrFaBccFaluJ48jyWiDTqkSZal7fivAVBTqC0qm4dFg6Q8EOY6htJ0r5RBzahOlCQF6grX5E6gCCaXGBJIASINGwhe+PY5+mYTFQ4EnC/bu4ej3Js+QksTeH+7nPOZT+/n4EAADAotiR3QBgzXQ6XWpqqk6nI7sh1szHx8fHx4fsVoCJRoF+Nxg/Uql0166wYN5rZDfEat29e0fReKdYKiW7IWCiQb8bjK+nXV3fPPwnslthtcpKS1L/cpzsVgAS2JDdAAAAACMGsRsAACwPxG4AALA8ELsBAMDyQOwGAADLA7EbAAAsD8RuAACwPBC7AQDA8kDsBgAAywOxG4AhVckq05JPDX9MWWmJ4cPdO0PKSkuEWZmF4gKymw+sGYyJBySTy+u1nRomm81ksshuy3AMY3FnZ6eDg8Nm7laEUFNTY9QBQfJ7GYXiAvzM2nUb1q7b4L9l02buVpVKOYr3hT8TmgOdw1mk1WpoNDrZ7x6YHeh3AzIlxscW5OchhM5/cs5/y6YRnavVan7NS2u1GmFW5trnnxVmZRJPyuX1/ls2GXWlVSolQmgzdyvxsz2Yh8M0Qmh7ME9+qw43RpiV6ea2oFBcUCgueOHFzYXigvOfnJPL64kr794ZolIpVSpl1AGB/5ZNacmnog4Idu8MwccghKpklbt3hlReu4oQUikUUQcEWWfeJ/lLAmYJ+t2ANCqV8trVb/M//wohtMxzxUjPPf/JuYioQ6N+dRqNzg/fd+nipx0dHcSTHM4izkL3tes2aLWa0hJpU+O92w0/nv/k3Fb/QA5nkeHpcnk98cw/P80Xf/Yv7u9+/4dX/F94cTMO67U11TjQE1dGCC33XIm74a5u8+W36nD7d+8MeefYn86eu6BSKff9cWdewRdEV335iueOxEaT+zUB8wT9bkCmlpZmotsb+upOhJBKpaySVVbJKvGTVbJK3O0tKy1JSz5VKC7QajUqlfJ1/qvt6jbcXVWplMKsTMPuc26OCP8Xb6hUyrTkU0Tf1lBA0CsXRB8RD4VZmYffSkAI0Wj0zdytHR0dDAYjIupQ5bWruDedGB+Lc9kF+XlEFoVGozfeu5t15v0dYeG4VVWyynZ1W5WsMuqA4IkfwnLPlbU11Qihk+8c81iy1DDHQqPRN3N/R/a3BMwRxG5AGiaTFRUdF3soEt/fwzGLTqcfiXvz0sUcfAzekMvrv/y3OCLqUFPjPXl9vUbTSVxEpVKeSU/jh+9DCOGsS1ryqeTTx9OST7m7e3yUnRV1QHCluMjR0XFHaNDANuATcYhHCH1fdd0wdH79ZaFarU6Mj8VJks3crU4M55Wr1mzmbo2IOkT0qXNzRI6OjnPnPeXu7uHEcOZwFi3zXOHEcF7muSL5vYwnfg5ff1nox92KEKooL13uudJoL/EqABiC2A3GUXV1tV6vH+aA7cG8i5cLEUJB2zbjLiqNRj8cl3Dt6rfEMUwmS9upuXb1W5VKyQ/fx1m0COcfcJQ8+c4xhFBa8qmOjo6WluYqWaXvCy8hhCKiDi3zXPHCi5td3eZvD+bhGE105w35cbd+lJ2FECorLdkezCOel8vrV65a7eo234nhjH4qIEEIaTSdhvctq2SVH2VnBfNeMzyXMHxSPjdHlBgfGxD0Snxi0ug+YXVbW319/ejOBRYNYjcYYxUVFSdOnOByudOmTSsqKrKxecK/sbXrNpw9d+FvmWcryktxQd7adRvQTxmPF1/mIoSWea5YuWp14NaXdu8MMSq6kN+qCwgKjog6FBF1qOy770eaN0cI7d0f0dLSXFZakpsjwi+NFeTnBQQFI4Qiog7hvA3eS6c7dHZ2El11hNDMWbOIVt1u+BFnV/DGG4I9g/7CwLYH8+ITk/DvFaxd3TaixjOcnek0mkDw5MwMsDIQu8EYMIzX3t7esbGxEonEy8tr//79w59IdGC3B/P8uFuvy67hhzvCwj/KziorLcHhUqvVxCcm5RV8cb+11SiDPHPWrKKvv8DbOBU+0sYzmSwv73VZH6S7us0nnpTL67f6BxIPz6SnJZ1OIx5uD+Z9lJ2FX4vmQDdMdLi6zcfZFbxx9twF03+dhPB2SAZUhQ8T+jH2nDkMBuPEiROj++6AhYLYDUZJJpOlpqYGBgY6OzsT8ZpYVtjNzS0vL++JF3n/rylEtFWr1SG8HXgb5x+IXrC8vh4nxP/7jUj8zMxZs9rVbYXigvDX9yf9OSExPjY3R3QkNnp0ReLbg3m1NdWGVSscziKijEQur1/j/VujK7/w4macdsf1fENRqZSG90hvN/w4zMERUYdcXGZHHRAQn4lh734YSUlJN2/ezM7OHsV7BxYKagTBaBw9evTYsWND7aVSqXl5eQwG44nX+e83Ij//16W7d26r1ertwTzDlMULL24mMsicRYuyzrz/5b/FTgxnfPfvrYQ/F+TnLXRfzOEsuni5MOuDdIQQ3lVXVxvC21EoLljovhifLpfX36q7GcLbUVdXO2gveO26DX/cO9yfCJu5W+Xy+oL8vK+/LMT9cSLQr1i5ysHBgTgSp0oQQo6OjoXigtqaakdHRw5nEa74RgbjMHEBuNGtyPzPv8rNEcVGRyCE3NwW7N0fYeJvo4yMDB6Px2Kx/Pz8xv77BuYH1okHo6HT6VasWFFbWzvo3ry8vICAAISQVCo9Ep+Qm1840utrtZqsM+//mvLtMYGDPhFeq2SVRV9/MUyrjI6fAHitYbxOvE6n8/X1zcjI8PT0JPdzAxMA+t1gNKhUakZGhq+v78BdMTExOHCPTpWsct8fd3osWfrXjH+Q/S5/kTlBCC3zXDF88tro+AmG/9wJDAwUiURubm5kNQNMDMh3g1Hy8fEZGLv9/PySkkZZ7oYt81yR+fdzZ89dgEk8RoHFYolEosDAQLVaTXZbwPiC2A1GQ6lUcrlcNps9e/Zs4kkPDw+RyKR7a8MbRZ0fILi5uWVkZAQGBhL3jYFVgtgNRuzEiRPe3t4RERGffPJJWtrjyjkGg2Hi/Ukw3ry8vA4fPhwYGPjrLwXMFsRuMAK1tbXe3t7t7e01NTW4niE0NBRnt4VCoYeHB9kNBI/5+fn5+/vDmB0rBrEbmESn08XGxgYGBqakpCQlJVGpVGJXRkZGSkrKr7k/CcbDvn37mEzm0aNHyW4IGBcQu8GTVVRUeHt7Ozk51dTUeHl5Ge1lsVgHDx4ku41gEEePHr19+zaM2bFKELsBkkql69evr6urG7hLrVYLBILIyEiRSBQTE0N2S8GICYXCCxcuSCQSshsCxhjE7klNo9GEh4f/5z//uXLlyhdffGG0VyKReHt7L1++vLy8HHLZlisvL+/YsWMymYzshoCxBGNzJq/Lly+fPn3axcUFzxhlOG+UUqkUCAQ6na6oqIjFMutlJMETUalUsVjs6+ubl5cHY3asBvS7J6mgoCCEUE5Ozo0bN9LT0w13ZWdn+/r67tq1SywWQ+C2DriCE8bsWJPH/W6lUjnU3BRgTFCp1IF3+ci1bds2hFBERERaWlpQUBCbzUYIlZaWFhcXl5eXj1Wldnt7u9HSvWAM3fi+ysQj3dzchEIhl8stKioyLBMaWxUVFTAmaFy5ubnhP54ez0UVFsYvKy9nMplkN8xqfV9VJZGIzSd8X758Gcdu9FMf/OLFi2P+Kmq1OiwsrA36euMpbNcuPp9v4sESieTMmTMikWg8wndDQ8OSJUtWPb+a7I/EarW3t89wZkilUmSY7/6fA/8n5A87yG6b1druv5nc/si1a9dWrvx5iQAicCOE0tPTN27caBjNxwqDwbh06RKJ7xoY8fPzwzczhELheFx/NpM5imkjgYnwtJF4G/Ld1k+hUERHRzc2NuL+NULo2rVrCoWCOIDNZoeFhb355psajWaUrwEsR1hYmKurK4zZsXQQu62fUCgMDQ3dtm0bh8PRaDTR0dEHDx7E2W1CXFwck8nkcrmXL18mu71g3B09elSlUmVmZpLdEDB6ELutn5OT08GDBzUaTVtbG51OT0hIcHFxGXiYl5fX22+/PeZpE2CeMjIy8vPzYcyO5YLYbZ2io6Ojo6PxNi7cfu655/BDOp3O4XDwtuFYytOnT/v4+JDdcDBx8vLyTp48WVFRQXZDwGhA7LY2ly9fDg8Pj4qKCg0NvXbt8bLrV65ceeaZZ0pKStavX//xxx+3tbXh50+dOkV2ewFp8Do7AoGgoaGB7LaAEYNxldZDo9EcPHjwH//4R1FREZvNNsxoS6XSAwcOLF68+MiRI4mJifX19Tdv3kQImU/NIiAFHrPD4/Hy8vJgHJZlgdhtJT7++GOpVJqamurs7HzkyJErV64Y7v3ss89CQ0PZbHZWVpZUKi0rK0MIPf3006+99hrZDQckw+vs4PANS2dYEMiZWIk7d+4IBAI6nX769GmEEJHsxtra2jIyMvD2Z599FhcXFxcXB4EbYJ6enocPH+bz+TAk0oJA7LYScXFxxPbbb7/97rvv4sFX2GuvvfaPf/zD3d19/fr1oaGhZDcWmB1YZ8fiQOy2VIahGSOGTfr4+OzZs+fIkSPELh8fn5s3b4pEoitXrhiOrgSAEBYWtnjx4tjYWLIbAkwCsdtSffbZZ0FBQYbDIw2lpqaqVKrjx48Tz7i7u0PUBsOLiYlRq9UwZsciQOy2VG5ubi0tLRs3bvz4448H7qXT6fHx8W+99dbx48eJSkEAnigjI6OwsBBmoTF/UGdiqby8vH7zm9/85z//SUxMxBUmdDrd8IAlS5a8+eabhnlwAEwhEom4XC6LxYISUnMG/W5LtXLlyrKysv379xcXF5eUlDz33HNGU5HMmTMH15wAMCJ4zE5kZCTM6W/OIHZbsB9++EGhUCQnJxcUFOCJAMPDwz/++GM8HaDRbFMAmI7BYIhEIhhyac4gZ2LBHjx4cPHiRdy5jouLc3Jy+uqrrzZt2mSUPAFgFNzc3FJSUvh8PozZMU/Q77Y83d3dvb29CKFVq1YZLhD80ksvXbx4EbrbYKzAmB1zBrHbwlRUVKxZswbP/fb0008bTgTo7u5OduuAtfHz8wsJCTF9TTUwYSB2Wwy1Wi0QCCIjI0Ui0bp16xBCS5YsiYmJGThIB4AxFBoaunz5chizY24gdlsGiUTi7e29fPny8vJyDw8P/GRjY+PFixdh0m0w3mJiYnQ6XWpqKtkNAT+De5XmTqlURkZGqtXqoqIio1k6YY0bMGFSUlJ4PN758+eJ+XBwNI+JiSG7ab9QKC6oralGCHksWbqZu9Vw1+6dIes3+PLD95HdxrEB/W6zlp2d7evr6+/vLxaLYXplQC6hUPjhhx/iHJ1areZyubGxseaWstvM3fr1l4V4w2hX0uk0qwncCPrdZqu2tjYyMpLFYpWXl0OFFjAHVCpVJBIFBgY+fPjwrbfekslkCKG0tDRLydoxmVbV+4F+tzk6ceIEj8eLiIgQCoUQuIH5YDAY0dHR//Vf/4UDN0Lo0qVLSqWS7HY9mUql3L0zJC35FEIoLfnU2uefFWZl7t4Z4r9lE0KorLRk984Qubxeq9Xg54knE+NjtVrN7p0hheICst/EL0DsNi8VFRXe3t7t7e3l5eV+fn5kNweAX5BKpa+++qpRuffJkyfJbteTGXa6fV94CSG0ctWas+cuIISEWZlr122439qq7dTQaPSVq9bgjPnadRu2bA24dvVbeX39lq0BA5Mw5ILYbS50Ol1sbGxkZGRKSkpSUhKVSiW7RQD8QnZ2NpfLVavVRs+fP3/eIgbvLPf8xRzIyzxX4I2Ojo6hTtkezOMsdE9NPrE9mEd2841B7DYLUqnU29vbycmpvLwcJm8D5qmwsHDQGK1UKrOzs8lu3XDk8vpRn8tgMGprqstKS8h+E8YgdpNMrVbz+fxjx46JRCJzK7cCwJBIJBqqb3HmzBmyWzcklUqp7dSYcmRdXS1CSKFoJJ7JzREFBAW/m5L+ZuR+rdaki0yYiasz0Wo1pSXS2ppqR0fHxR5L167bgH4qxvRYsnTdBh8abZAZlEwsySSKOp9f7cVksyuvXW28dxfvmjvvKcO/d8pKS778txhvL31mWWdHO4llQ5cuXYqNjT18+LBQKCSrDQCYzsvLq7y8PDMz89ixY4a3KGUyWUVFhTmUsVbJKhFCuEwQIdSubpOIC8q++16r1Xz9ZSFnobtWq7l29RuEUFlpyfIVzyGEbjf8iBD67zcij8XHlpWWuLrNRwjl5ogQQp8XXNp+7gJCyMVl9huCPX/N+MegYYoUlP7+foRQWBj/uefXhvxhx3i/3trnn42KjjMMprt3huA7BoNSqZQmVvb4b9m0ctXq+MQkhFCVrHLfH3fiL+wPr/jPnDULv0RujqistCT5vccrplfJKo/EvZn/+Vfj/a4RQtv9N7+deIyoplIqlXw+n0qlZmRkmMO/eABGRK1Wnzx5MjU1lciiBAQEpKSkbPTx+bbSUmf9Nj3akKWstCT1L8eLpVJESs7E3d3D9INH9FE6MZyNnqHR6IfjEj4vuCyX16tUyuTTxw+/lUDsXea54oUXN0/8J4BH3EREROTl5UHgBpaIwWAkJSXV1NQEBATgZyQSSUtLC9nt+lXMPHAbMZd8t1ariTogwAWY/ls24fpKw5LM3ByR/5ZNuTkiubweV2KaeOWmpsYFnIUczqIz6WkuLrONvp6IqEMT+TZra2u9vb2Li4uhBBBYATc3t7y8vKKiIg8PD51OB6m/iWQu4yppNLqr2/wKUelfM/4REXVo7fPPyuX1HM4i4oDtwbyy0hJ8t/dgVIzhrqFUySoVisbk08ejouMQQteufkvue/znP//53XffZWRkQCUJsCY+Pj41NTWpqal/+9vfcA4WTABzid2Yi8ts4lYAvjVsWJKZ/F6G/5ZNDAbDxFrLZZ4raA70su++J/ttIYTQ91XXH9xv/d///V8YJwms0sGDB59//vn/2r6d7IZMFhOdM3FxmY1v8o4OZ6G7RFxgerGOYfc8IOiVlpbmCX6/hGeXLf/tb3/r6+uLl00AwMqkpqbu2rVrypQpZDdkspjo2M1Z6P591XXioVarcXNbYOK5wqzM5PcyQng73hDsGcVL88P3ubjMxtlzw2tO2Hv/wx/+IBKJIiMj+Xz+wMFpAFgoiUSyZMmSyMjIl19+mUKhkN2cyWKicybJ72Xs3hkSdUCwPZh3s7b6+6rrRMUerrIkbkJeu/oNZ9EioiTzLyffwWUkoa/uvCD6KDE+FpcDYkRR51b/QBaLTdRv4iryn1/9r5nvHPsTrhlHCHV0dEzwvUoPD4/y8vLs7Gxvb++UlBS4XQksGp7tUiKRIISoVCqfz//s88/JbtQvyOX1t+puEoNI8BATYm/oqzsNixeEWZnfV11nMBhODGePJUsXui825b4aWSa6vhtTqZQqhYLJZpNSlEPKq0N9N7AmarX62LFjhivpmG19NzHaAz/037LphRc3R0Qdys0RJZ8+/m5KOu7h+W/ZdDgugejt4f6lUeePdCTXdyOEmEzWMs8VZFVTkvvqGIvFEovFu3bt8vX1NfO5IAAwkpqaOn/+fKMl0A4fPkx2u0ZmezDPxWV21gfpCKGoAwLOQnfDSJ38XsbN2urRX338mUt99+QUEBBQXl5eXFzs6+tbW2tevRUABiJS20Y3bDw9PS2x8rWlpRnfb6soLx1YvRbMe43sBg7HvGoEJyEGgyEUCqVSKY/HCwkJgemogHnS6XSBgYE4tT3Q3r17yW7gCLSr26pklZcu5ri4zI5PTKqSVf4gv0WnOxgdZj5TlwwK+t1mwcfHp7y8vL293dvbG4oIgRmiUql79+4ddFp5FosVFhZGdgNHwInhzGSz4xOTJmYuo3ECsdtcUKnUpKSklJSUyMjI2NhYi5jMHkwqAQEBRUVFAweXhYaGWtxSIYa3u5Z5rljAWfhrxp2QAmK3ecFzbDo5OXl7ew/19ykAZPHy8srNzTUagGNxdykH+uPe/X8/k2446K9KVmmG6y0YgthtjmJiYkQiUVpaGoziAWZFrVa/+eabpaWlnp6e+JmAgABzLnIlZuvGo/DwQJDbDT+qVL9YH5kfvi+Et+MPr/gnxsfm5ojSkk/V1dWaW4GgEbhXaaY8PDzEYjEexZOQkBAaGkp2i8Bkp9PpuFyuUCj09PQsKiri8XgSiSQiIoLsdg2HRqPzw/cR66ss81wxVI47IupQRNQhHNzNcHXKgaDfbdbCwsKKiory8/O5XK7hMiUATLzAwMCEhATc42YwGHl5eUlJScRwM+uwzHMFsQaxmYPYbe5YLJZIJIqIiPD19c3MnLjZVwAwxOfzQ0JCDGdxoFKpUNJKIojdlsHPz6+8vPz69eve3t5DjeKRSqVkNxNYp6NHj7q6ulpWIaDVg9htMRgMRkZGRkpKCo/HO3HixMAiQgcHh/DwcIVCQXZLgVXJzs6+ffv20aNHyW4I+AWI3RYGFxEOOorn/PnzN2/eFAqF6enpZDcTWAmJRHLhwgVYzMwMQey2PHgUD54KPDY2FhcRSqXSd9999+23346Li/Py8oqOjia7mcDiyWSyY8eO5eXlkd0QMAiI3ZYKTwXu5OR06NAhhNCRI0f27NmDb/qvXLmyra3t448/JruNwII1NDTw+XyxWGxxYyYnCajvtmwxMTF6vf748eMqlcpwIrebN28uWGDqgkQAGFGr1YGBgXl5ebC8qtmC2G3xbt26lZ2d/e67777wwgvh4eELFiz44YcfVCrV2rVr8QG4A/7aa2Y9oSUwH8QYHDc3N7LbAoYEORMLptFoNBrNnj17NmzYsG3bNjqdnpWVJRaLnZ2di4uLcf5k/fr17e3tS5YsiY6OrqurI7vJwNzpdDoej0eMwQFmC/rdFoxOp0dHR6tUKrFYbPh8W1sbm81GCF27dk2lUu3fvx8htHLlyqCgoE2bNuGHAAxKIBD4+/vDSqrmD/rdlu306dMFBQXHjh3DZd0ajUalUj148ADvnTNnDvopZ4IFBQVpNBrogINBwRgcCwKx2+K5u7ufPn1aKBQGBQU999xzTCbzxIkTeBebzX7mmWfOnDmDHwYFBbHZbDqdnpube/z4cbIbDsxLZmamSqWCMTiWAmK3lYiLi7t48WJxcfGVK1fc3d0vX76Mnz9w4EBpaanR7UqxWHz16tXw8HAYRg8wiUSSn5+fkZFBdkOAqSB2WxWc5tZoNKdPn8bP+Pj4BAYGEl1vhBAuKDx37lxWVta9e/egDBxUVFScPHkSxuBYFojdVqipqcnLy4uY2GTVqlUqlQpvKxQKXFBIp9MRQq+99trFixeJTjqYhBoaGgQCQV5eHozBsSwQu60QzoBfvHhRKpUqFAqxWOzv74937d+//5lnntm2bRtx8KpVq7Kzs8luMiCHUqnk8XgwBscSQY2g1dq/f//HH39cVla2d+9enOlOT0+/ceNGcXGx0ZEtLS1kNxaQQKfTBQYGZmRkwBgcSwSx25oRNycVCkVTU1NaWlpERATOiRPEYrGLiwvZLQUTDcbgWDqI3ZPFO++8w2QyjQbmpKenl5aW5ufnk906MNFgDI6lg3z3pMBmsy9evBgdHW1Y1p2env4///M/e/bsaWxsNJoKHFg3GINjBaDfPYls27Zt27Ztx48fv3r16o0bNxBC77zzTlxc3LfffhsREeHj45OQkADFBlYPj8GBUm5L9zh2U6nUv733l08vQKnvePm+qspMwmJcXJzRM6tXry4vLz9x4oS3t3dKSsoYrvytVCrDwsIeDVieDYyhAH//yMhIEw/GY3CMJsAZK1QqtVml2u6/meyPZAT0er2NjcWkH9rb2+ewWXib0t/fjxBSq9UymYzshlkzKpVqOL+2eaqtrRUIBG5ubikpKWNSNCaVSg9EHDz251NkvzOrdeP7qi//XVBs2vjYioqK2NjYcV1OQSaT4YWczJ9EIiksLDx58uSUKVPIbssIeHh4sFgsRPS7GQzGGPa2gIXy8PAoKirKzs729vZOSkoKCAj49dd0cnJau24D2e/Mmn357wJTDsNjcIqKisb17z/zr1pRq9XZ2dknT55UKpUpKSkvv/wy2S0aJYv5YwFMmLCwsKKiog8//JDL5SqVSrKbQ6aoAwKtVoO3q2SVwqxME08sFP8inpaVlhDXMZKWfEourzd8ZvfOEOLgqAOCMXkjMAYHfwixsbHz58+PjIxUKpUsFmvfvn1kN2r04F4lGASLxcrLy5NIJL6+vhEREWP+T7xKVokQWua5QqvV0Gj0oQ7LzRFxf/f7YQ4Yw8Yw2Wwm83EmUavVKJWPZxQgNurqau/euV0lq8w++0Hyez/f6MvNEa1YuQohVHntavWNqld37UYIsdlzDd/ad99WNDU14sOMtKvbVAoFh7OIuNr6Db74RLm8Xq1+gCO7SqFgstnEYSMCY3AaGhpOnjyZnZ2tM7j1kpKSYia3oEYH+t1gSH5+fuXl5devX/f29q6trR2ry+7eGVJXV4sQijogeEOwZ6jD5PL65NPH5fX1T7zgwC5tlaxy7fPPpiWf0mo1KpUy6oDAf8umtORTUQcEu3eGEP3c3BzR7p0hGk0nQuhKcdHunSE4jtNodA5nEYeziMFg4A0OZ5G7u4cTw3mZ5wrDwI0Q2h7MMzwAby/zXGH0K8fd3QPvSk9LxhvaTs2tuptODGc63YE4rPpGFT98H+62F+Tnrd/giw/OzRHdqrs5ik97ko/BkclkPB5v/vz5mZmZhoHb09MzNDSU7Nb9KtDvBsNhMBgZGRkVFRU8Hi8kJCQmJuZXXjA3R8RgzNgezEMIJb+XkRgfO9SRpvcxj8RGG8XTZZ4rEEK+L7xEo9FpNLqr23z5rbqIqEMIod07Q9459qez5y4Uigs+ys7K//wr4pQ5c+Zeu/oNPhdTq9VE9qOp8d6vfO/CrMyVq9a4us2vklUu81xx6WLOiy9zDQ9IjI8NCAquklVeEH200H2xo6PjnLnzVCqlvL4OIbSZu3UULzppx+BIJJKTJ08ONctxQkIC2Q38taDfDZ7My8urvLwcr3s5cBSPUqlMTU01/WoV5aVlpSV42zB4lZWWpCWfys0RDTylSlYpl9fj/rVcXm94WNQBgfxWHe4vm2K558rammqE0Pt/TQkIesVw19p1GxZ7LDU6fqH7Yvzj4Og0og8tN0dk9F744fuOxL0Z+urOZZ4rhFmZDQ0/DLyLq9F0piafSDqdplIo+OH7NnO3xkZHZH2QbvTLyUSTfAzOUCPOfHx8xuQ+PLkgdgOTUKnUpKSkvLy8yMjI2NhYwz8/BQJBZGTkpUuXTLnO9mCel/e6oG2bow4IVColEbwS42Obmhojog5V36javTPE6KzU5BMsFptGoxeKCyqvXY2IOlRWWpIYH6vVakZ68+3rLwv9uFvl8vpvKspWrlpjtNcomBrlTIjncdZFq9XI5fXET11dbbu6jXjo7u5heAo2c9Ys2f+7ihAa9DdBfGJSU1Nj+Ov7mUwWbkmVrPJ+aytCiPhtZ7pJvg6On5/fUBPbpqSkkN26MQCxG4yAh4dHeXm5k5PTkiVLJBIJQuj8+fM4avP5/OFz4v39eryR/F7G3zLPym/VBW59KS35FEJIpVJ+8W8xTqTEJybV1lQToUqhaBRmZZ49dwGnj9//a0rjvbtpyacYDIZEXECj0Z0YzuinJMnwcnNEifGxAUGvxCcmaTs1wxxZKC7APw0NP+Duc6G44NLFHEdHx0JxQW6OqKToK2SQFh+Y78Ypb6NW5eaI3kr48/t/TUEIVd+oWu650qhwpay0pPHeXdwAlUqZlnzq2tVv8j//6uy5C7k5Iv8tm0wvdLl06VJhYeHYDp7U6/VjeLUJ4OfnN/ATCAgIsI7UP+S7wYjFxMSEhYXx+fyPPvroyy+/xE+q1erAwMDy8vKhOsL3W+7NmDXXxsYWIbQ9mLc9mJeWfCrpzwnPr/ai0x02bPDW6/vwXheX2d99W4E7nhdEHzEYM4iLtLQ047Q1Qig+MWlEzd4ezEPBPLzNZLMXcBbiu5QD4cxylazSzW0Bbufzq73iE5OEWZmjSzoTOJxFL7y4uVBc8Oqu3XS6Q2x0xHLPlcTepqbGufOeWrtug1arKS2RtqvbPJYsJRLuAUGv8MNNKvipqKhIS0sb88GT9+41zJ3ramtrO7aXHVcNDQ3r1q0rLS0lnrGCTDcG/W7Lptf3NTbenvjXZbFYYrH4zp07zc3NxJO1tbU8Hm/Q43u6dba2tjY2tlWySpXqcc14RNShNV5rb9ZWT6dRdY90OHDr9X1z57B8X3gJHxP++n75rTrcPcfKSkv0fb0d6uaqyvJRt5/JZHksWTowt06UoBSKC+rqaolfDzieOjg64UqVQZPyw6urq8V/WEREHbKzpTz99NNMJivpdJrhMfhXGkJIo9Fs5m51Yjhv5m7FP65u8wdmeAZVW1sbGRk55uvgdHXp7OzsLStw43zRlStXkpIef48HDx60jk43gtht0R4+1DY03NJoOkh5dalUatidwSQSSWzsIKUjHepmRwYTb5985xjewPcet/w+wNmJ9lDXmxgfq3ukabxd+9zK5US2gU53+ED4yQXRRzhchvB2fCR8/3Ke6LuKktqa/yCEHB0d0RCDX3Al4lCSTqdVlJca/lYQZmVyOIu0Wk1Zaclm7tbtwTycuW5Xt1XJKpVKhbu7R/J7GUmn07i/+/1IPy6c+9br+9QPFJwFc3p7uhBCTCarXd1GHIOrGIVZmUP9QfBESqWSz+eLRKIxH4PT3KyYPZs1ttccV3w+H/0UvmNiYvA8a4cPHya7XWMGciYWbPp02qxZTIXi7hOP1Gg66HTH0e0dlE6nw/9vDHTixIk1a9YY3sfv7emi2Nja2tohhJhsNs5C4Jj1gfCTmTOcO9pbM/7+kTArM+5w9Isvbdq6LRAhVCguCOHtqKurZbLZIbwdjffulpWWREQdys0RXb58KTBgG65R4Yfv6+jo6OzsIOqpccIBnyKX16sUCoQQzlQYZjyYTFbZd98LszJ37wxhMGY8u2w5zkjQaHTijiWuU8Rl3cSJ8vo6o1uacnn9Jx+elYgL/rh3PxqWjY0tYwZbq1EjhPAwH/mtOqJ377FkKZERwoiEye2GH5/4pajVah6PN9IxOKZ8+11dOhsbGzs7+5H8GyETn8/fuHGjYYHN0aNH/fz88Ewg1uHxXFTAQnV0qBWKu4sXPzvMMXq9/u7dH1xdF45i71BOnDgxaP8ao1Kp5eXlnp6eUqn0SHzCmawshjPLdoj/8++33DXcq+l8oOm4z5r7hOLuB62NCKEZs+aOx6cql9eXFH21wXcTfqjt1NAcfh5oo+3UDHprNC35lFHk/fmUXw4fbbpT4zxr7rTpT4iYcnk9UeQ+1ADUstKS1L8cL5ZK8RicvXv3jqiU28Rv/969BiZzjr29BczZhAeRhoSEWH1lJPS7rVxPT09T0+2hKgSG3zuMmJiY0NBQiURSXFwslUqNpj3B//9UVlYihKZPn0ZBlKECd29v9zB7yYILRUZ61lCBGyE0umH9hm144hVGMQbHxG+/u7sLIWQpgZvH40VEREyGsUgQu62BTvdIqWzs79d3d3fPmsWcOfPx+pNq9f3u7m69vr+rS9fcrEAI2dnZz5gx64l7OzvbGxtvUyiUefPmt7YqKRRKT0/PjBmznJ1nES/q5uYWHr5n/fo1x48ndnX1EXEcTwHa0NAQGBiYkJDg4bHQ0Xn2UC3vaGsedG9Pt66zvVWv7+vp6aI7zHBwmoVM09vb3f5AaWs3BW87OTPt7acaXrZD3WxnP7Wvr7e/X29ra9fZ3urCmk+d9uTYqtf3qR8obWxsKBSbnm6dg9OsqVTaz6/b093Z0Wpja6fv69V2Pujt7XbleFIoNj+1qqet9R6iUGwoNnYG7enuevSg5a5e3+fCXtDepkT9qLe328FxFs3B+YntwedOte9xoNPS09PWr/det25NW9t9Z+eZhm1WKO7p9XoKhdLb28tizaVSp5nyb8NQS4ty9mz2E9tDOrVazeVyExISJkPgRhC7rUBPT3dzs+Kpp+bb2tr29HTX1Fx3cmLg1CSDMRMh1NqqQqh/4P9+w+x1cHCaM+fpO3fkHR1q/Ad1X19fXd0NCoWCz8L0en1vb29PT7eHx288PDwOHjyIEJLJZFKptLCwUCqVZmVlucyeYWc3eJetr7env79/4N6+vt7OjtYZLnMRovT19TbdqbGznzptugN6kr6+XmXjLSZ7gf0UKkKot6db2VTPnuuO+/X9/fpmxQ+suYvwwwetjf39/S4sN3zw8Pr7+1VNtxydXGgOMxBC3V0PlY3189yewbUxCKEWVQNzDgc/dHJmKRvrent78K8Nvb5Pea9u5uyncJKku/tRe9vjP1OmTJ3mNIPVqrrdoW6e6fIUhWLT19fbeLt62nQHG9sn/L+Jz21qvMNkzqqurktPT+/t7ampue7o6IRvLfT398vlN2fNYuJo/ujRw1u3qhcvfhb3oIf/t2H4r0uv10+ZMhWZN1yimpGRYTVlJE8EdSYWz8bGFgduhJC9/RR7+ym6MVqnxsbGls2eh7dtbW1nzWKqVArDA6ZMmfrMM88tWvSLceSenp4HDx4Ui8WPHj3y83uxpqZuqOu3qwfvdPf2dDFmsBGiIIRsbe2m0xmajlZTGqy+3zSd5kjEYjv7KdNpjLYHTfih7pGWYmND5GemTXd8qG2nTnOwfVKURAh1drT26/tx4EYIUSg2trb2/T9nG/q7ux5RKJSfPjebmS5P/Xxue4utrR2R3Z4yZZrRrysKxWbGrHm4k25ra2drZ9fT02Xid9TV1V3476/T09MRQnZ29vb2U3S6R48/DfV9vV5PdMOnTZs+fTq9tVVl4pWx5maF+Xe6GxoafH19U1JSJk/gRhC7rYCtrS0RNRBCNjY2en3fWF3Z8CGVOu3RI+3wr26ot7dnzpw5Wu2jQff29fXq9X2GCQ3CVCqN6M8ihOynULu7Br+IEa2mzSj7QaXSHmrUeJuCEPrlnXkbiqn//h9p26kGHX/7KdS5rksN0vQUGt2p6e7NjvYWfV8vfgvEW3v0sHP4nIyNjY3hZ0hBFNO/wSlTp3I4nJ/PpVD6+h6f29Ghnj6dZnjw1KnUoaYRH1Rvb49e3zd1qllPlNrQ0MDn8/Py8iZV4EYQu4HpcP/U9Bubzc0KCmXILm1Hm8qJMduU69jY2Jryov16vV7fZ2v7iy6trZ29Xt/3fz8VVckqqdMdbO3sHz18XA6v6biPe/24oJs4ZdCZQ/p6ew1vqA4cmzOL6eY8g/1Qo77bcKNZ+aNhx1nf10vKzdje3p7u7q6WFiXx09/fT+S7TdHcrHBxMetOt0wmCwwMFAqFk3BqcojdwFR9fb0Uio2JC7P29vb29vZShujY9vX19vX1mpJoRgjp+/psTBjOR7GxoVBsiVlTfjq3l0KxPSfM0mg6Eeq3t6d26R42K28Xf/053XEmje6MEJLX13/575+Hjy9f8Zz/lp+qA3/qpdrY2ioVP88B6+DgYDTUEyE0nc5gzV009+kldnZTFHdv9nTrfjrXbqz+EhoRW1s7KnWaiwuL+Jk3z23ePDcTT8ff4Ihi/QSTyWSRkZFFRUWTMHAjuFc5Gdja2hpW8RuNxRhmr1Hp/8OHGsNVArC+vj6jP/mxlhaFiwvrhx/uDNqkDnWz49CdbqP429P9iEqlIRNMpzl16bQ4QYGXs+nt1lR/L+MsdGey2ZcvfTqXPdNpBptCsXOewTa8+enEcO7v7/9X/qfXK2WrvdYGBL0izMqcM3deU+M9PGCHOo3+1ReFDQ1NxClz5z0l/eqzru7+psZ7331TumTJYueZTISQnf1UXHX+UNvuNIWKEJpKnU7E8ccfmsmhvL+/v7vr4ZSp04dKTA2DTndUq+8bPfnwodYwkTLMt4+/wZG+6ITB03NP5lXcIHZbPyp1uk53r7+/n0KhqNUPjNKXw+zV6R52dnY4ODgihLq6dK2tzW5uv6h67u7uqqmpmjZturv7bwyf7+vr6+7unjZt+qDt0ev7+nq7p0wdskPX3fWop6cL54t7e3sePexgPmmoDuY8c06zQk5zmGFnZ789mNfX1/uf62VffSX925kPEUILFiwsLLhAp9OmTp3i7DRF2XiLYmNXWlre0d5+u+HHLyV5nPlshhNdWnQlPjEpMT52ztx5xNxPrQ86bG0p6zesn07Dc7f2t91X0B1mdPf0ij/7V/J7mer7Tf39s3+OsP39U6mP376Dk4vi7s3u7kdTpkxDCHW2t+r7ek0cE9d2v7FD3ezEYDqPfBTSjBkura2qtrZWorKzuVnh6Mgw5dsf/hsknUQiOXPmzGQO3Ahit0XT6R61tqp0ukdEMUBzs0Kn07W0KKdMmUr8tTtt2vQZM2bV11dPnTrVwcHJ6H/IYfZOmza9q+tRZ6e6r6+vu7vL1ZVjNEKEQrGxs7O1tzdO5g7fZetQNzsM3emmIDRrtqu2s62/v0+v1+v7emezFxD3/fr7+zvUzQihR9r2/p9S8I6Mx0HTzn6KC2u++oHC1tbOxsb29o/yUyfe3fTyFjzDVKuqUdXc/N3VKltbm1dC/+A807mz4/7Gjb9tarrf0dHhtXbDg9Z7T7stuZT3L61Ws/SZZZu5W4lh9AsXLm5RKaVffe7k5KTvRxSEurr729QdyaePv5uSbmtrp9NpGm9XT6c72dra9/fr7adOo0573K+3s5vCnMNpa220sbG1sbGdSqVNmTpd29lmZ2dPodh0qFt6erra1c04+9+hbu7p6epQN9vZTbGfQrW3p1J+WRJO6OnWdahbKKh/8eLHoyKNvn0bG5uFC5cqFHfa2u7b2dlTKJQZM2YZ5UCG+vbNudOdnZ2dn58vEokserXJXw/GxIPBmTLaflB6fd/duz/iqnA8Jj43v9Bw7/2Wuy5Mt/FuP76d6O7uceliDp4wpPF29Z17Ld6/3VgoLigUf/Z20mlbm/62+4qWVm3R11/MnfeUu7sHzYH+yYdnn3raFQ+I13ZqOIsWDTWmMS35VOirO4kViklBjIkfw2safoPmJjs7u7i4OCMjY5IHbgT9bjCM0f1e7+9HLNa8YQ5gzBj30oUqWSWeTBWvhYb73T06LW36VIQQnlUVIdSubu7p7S/6+ovrsmtEFG5o+OH/HH5r+DHo+EYlMQjecOIRK/DEb5AsJ06cuHnzplAoJLshZgFiNxjEw4danI1RKO7Nns0e0azNtra2wxyP8wbj3X6j9YLxCusUCrpZLZs922XadDpCSK/vq6+7mZmRGcLbgRCS19fJ/t/V2ppqBmNGaYm0s7Ozs6P9+6rrzy5bHsx7LevM+x5Lfh6CdLvhR1e3+cQkf7U11R5Llv7KZRnMx/DfIFmOHj3a1dUFgZsAsRsMYvp02oIFi8luxdhwdZtPRNWX/bYihLRaDV5afrX3nNXevlWyytqaajyta6H4M7yqb9QBwfZgHnGv0mieqdqaat8XXiJ+Q1hN1DZbAoGAyWQSSygABLEbWCWtVqNUKhBCNAf686u9du8MCX/98czaTDYbIRS2+/WBs6pqtRpXt/nCrEy8EPDARdwBKfh8/po1a/btM2m9t8kDxuYAK0SsAsxisb/7tuLsuQtr121Yu27Dd99WpKcls1jsZZ4rBma0aTR6RNQhB0cnPNYGr2RvdMyIxpSDXwlPJrxx40YI3ANBvxtYLa1W85KPt8eSpYnxsUufWebg4OCxZKmjo+Mbgj1nz13Ax8jl9Ufi3jwcl4AQKhQX1NZUP7/aC6dNCsUFr/Nfzf/8K6PLJsbHSsQFoa/uJPv9WTk8GfeuXbsM12ACBKgRBONoYI3gBBt0uRmVSmlY2IcfDlorMlQBidEVSDQeNYLmAM/pevjw4UkyGfcoQL8bWLNBS/2Mwi5+OGiMHqryz0wCt7XCgTspKcnLy4vstpgvyHcDAMxIQ0MDl8tNSUmBwD086HeD8XXn9u13T/6Z7FZYrbt37/z6i5gPPBm3UCj08PAguy3mDvLdYBzpdLrU1NSxWscHDMrHx8fHx4fsVowBmUwmEAhEItHknNN1pCB2AwDIhyfjFolELBbcSzAJ5EwAACSDybhHAe5VAgDIBJNxjw70uwEApDl//vyFCxdgMu5RgNgNACBHdnZ2YWEhBO7RgdgNACBBamrq9evXRSIR2Q2xVBC7AQAT7ejRo+3t7TAZ968B9yoBABMqMjISIZSSkkJ2QywbxG4AwMTh8/murq5Hjx4luyEWD2I3AGAi4DldN27cePDgQbLbYg0gdgMAxh0O3P7+/mFhYWS3xUpA7AYAjC88p+vevXtDQ0PJbov1gNgNABhHsIrCOIHYDQAYLw0NDYGBgSkpKdYx06FZgdgNABgXeDLulJQUT09PsttihSB2AwDGnkwmw6soQOAeJxC7AQBjDE/GLRQKYRWF8QNj4gEAY0kqlR47dgzmdB1vELsBAGNGIpGkpaVB4J4AELsBAGMDT8adl5cHc7pOAIjdAIAxAJNxTzCI3QCAXyszM/Obb76BybgnEsRuAMCvcvToUZVKBZNxTzCoEQQAjF5sbCxCKCMjg+yGTDoQuwEAo8Tn852cnGAyblJAzgQAMGI6nU4gEGzcuBHmdCUL9LsBACNDrKIAgZtE0O8GAIyAWq3m8/l79+6FOV3JBf1uAICpiFUUIHCTDvrdAACTKJVKHo8Hc7qaCeh3AwCejFhFAQK3mYB+NwDgCWprawUCgUgkgjldzQf0uwEAwyFWUYDAbVag3w0AGFJFRUVsbKxYLIY5Xc0NxG4AwOAkEsnJkydhMm7zBLEbADCIS5cuffjhh2KxGOZ0NU8QuwEAxrKzs/Pz82EybnMGsRsA8AvZ2dnFxcV5eXlkNwQMB2I3AOBnR48evX37NkzGbf6gRhAA8BiezRUCt0WA2A0AQAghPp+PfgrfwPxBzgQAgPh8Pszpalmg3w3ApKbT6bhcLgRui0Pp7+8nuw0AAHLgVRRgTldLBP1uACYptVrt6+sLgdtCQb4bjK/U1FS1Wk12K6xZQEDAKOZlxasoZGRkwJyuFgpyJmAcSaXSXbvCgnmvkd0Qq3X37h1F451iqXREZ+HJuIVCIQRuywX9bjC+nnZ1ffPwn8huhdUqKy1J/cvxEZ3S0NDA5/Pz8vJgTleLBvluACYRmUyGe9wQuC0d9LsBmCxkMllkZGRRURHM6WoFoN8NwKQgkUgEAgFMxm01oN8NgPWTSCRnzpwpKiqCOV2tBsRuAKxcdnb2hQsX8vLyIHBbE4jdAFgzPBm3WCwmuyFgjEHsBsBqwWTcVgzuVQJgnWAybusGsRsAKyQQCBBMxm3VIHaDySs3R1QlqxzRKYnxsQihtORTZLd9OHw+f/ny5RC4rRvEbmC15PL64Q9ovHcXb2i1mkJxAfETdUBAxHRiWy6vV6mUDQ0/IITmznsq6oCA7Pc3CJ1OFxgYuHHjxn379pHdFjC+4F4lMF9yeX1Bft7XXxauXLUaT0Z4+K0EJpNl4rk7QoPKvvvelINpNPpm7lbioeH29mDekbg3PxB+ghA6+c6xEN4Oubze3d0DIVQlq8w++8HbSacRQqUl0vf/mrJy1epXd+2+VXfzgugjhJCb24KGhh+2bA3YHswjWpWelsxgMJwYzgihdnVbQFDwMs8VY/Jx4cm4d+3aFRAQMO7fDSAb9LuB+eJwFvm+8FJLS3N8YlLyexkIodf5r5p+7jCBWy6vLxQX3G748drVb6IOCLRajdEBxDNr1204HJdw/pNzLBa7oryUzZ7L4SxCCLm7eyzzXJH8XgaNRsehv6WlOSAomMNZtJm79X5r63LPlfGJSQejYpJPH8/NEeEXjXpj39tJp+MTkyKiDkVEHXrqade6utox+azUajWXy927dy8E7kkCYjewGGG7X/+moozIZlTJKo2yIlWySpVKSYRdlUo51KVwhFWrH6xctebtpNOlJVKcLUlLPoU33hDsIV5o7boNc+c99ZeT73h5rzO8CM60DN/mZZ4rXFxmf15wCSH0zrE/rVy1mkajE3v54WOT2cCTcSclJcEqCpMHxG5gMYq+/mIBZ+EyzxVyeT1ON3/y4Vki77x7ZwhC6PN/Xco68z5CKC35VODWlxBCcnm9/5ZN+LDdO0MMb07W1lRnn/1AXl+/mbsV/1yXXcMbZ89dIFIZacmnHBwc1nj/1tVtfl1drVxeX1dXW1dXq1Qq2Oy5w7dZq9W0tDSv3+CrUilra6oDgoKNDiDSKaOGF5xMSUnx8vIi+ysCEwdiN7AAuEf89ZeFmX8/hxB659ifwna/vsxzRXxikvxWnTArEyF0v7WVs2gRP3zf86u9EEKhr+7E53I4i94+/m5FeakwKzP89f1ERM7NEXksWbo9mJeafAL9VECCEDKqPNFqNddl1xa6L8ZJcHd3Dw5nkbu7B94YJlV9u+HH3BzRkdhoP+5Wfvg+lULxg/zWmH8yWq2m7uZNWEVhEoLYDSzAZu7WiKhD+Z9/hWNlbU01seuFFzdfuvgpQoiz0P0lH+/E+Ni16zYghAxvaS7zXBHC23Hp4qd4F1Z9o2q550o63eHsuQtlpSXEwmzLPFcQcVyr1fzl5DvLPVfiHDdCyLDfXVZagjv7g3J1m789mJf8XkZ8YhJCiOZAR+OARqMv/c1vPDw8yPhaAJkgdgOLt3LVaoRQ8nsZ76akX7v67aDxtF3dhhDCPXSEUJWs8tVdu4m9WR+k43IR7MWXuTjHQqPRlz6zDHfkMcN+99p1G86eu2BiIzmcRWu81l66mGP0/MDbpCNlZwfVYpMRxG5geby812Wf/QBvX5dde/FlLkIoN0e0dt2Gf36ab9grx9KST8UnJn0g/OTvZ9JxSoTJZhNd6bLSkvDX9xveQly7boP8Vh3err5RRac7mNgwjaZzmL2H4xIk4oKy0hLimUJxgVKpIPvjBBYJfmMD8yWX1xd9/YWLy+zcHBH3d78nwmvyexlRBwSJ8bFODOcQ3g6cCfm84FLjvbvt6raExCSEUG6OCJ/Y2dF+u+FHrVZDp9M9lixNTT7xVsKficCNrV23QaVSqhSK+62t+Jl/fpo/aJOuXf1GoWhsaryHEFIoGi+IPlq/wTeY95r4s3/hl2Oy2bfqbs6cNet2w49lpSWGWZq16za8m5Ke9UH6yePHOAvdGQzGq7t2G7UEABPBOvFgHEml0iPxCbn5hWQ3ZHBpyae2+gcS0TPqgIDBYOD0tCnHmwO81vBI14kHVgD63WDyiog6ZPgQD/8x/XgASAT5bgAAsDwQuwEAwPJA7AYAAMsDsRsAACwPxG4AALA8ELsBAMDyQOwGAADLA7EbAAAsD8RuAACwPBC7AQDA8sCYeDC+2tvbDWfOA2PrxvdVZDcBkANiNxhHbm5uM5wZqX85TnZDrJmvjw/ZTQAkgHkEAQDA8kC+GwAALA/EbgAAsDwQuwEAwPJA7AYAAMvz/wE9PYgcEU+0wwAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAxOC0xMC0xMFQyMjoyODoyOCswODowMF8MYOwAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMTgtMTAtMTBUMjI6Mjg6MjgrMDg6MDAuUdhQAAAAAElFTkSuQmCC" class=""></p>
+
+<p>Linux系统中进程通信IPC基本从Unix系统继承而来。由于Unix系统最初发展产生分支，主要由当前AT&amp;T贝尔实验室以及BSD两个机构分别实现两个版本的Unix系统。从IPC进程通信的角度来讲，AT&amp;T版本的Unix主要发展形成SystemV标准的IPC通信方式，该方式仅仅限制于单台主机内部不同进程通信；而BSD机构版本的Unix则发展出可以进行不同主机不同进程通信基于socket的进程通信方式。</p>
+
+<p>为了摆脱不同版本的Unix差异性便于不同版本之间的可移植性，发展而来的新独立的Posix标准。Linux操作系统由于是基于Unix操作系统基础上发展而来的，除了支持Unix不同标准外，也很好的遵循了Posix标准。从进程通信的角度看，Linux系统共支持三种不同标准通信方式。第一个是继承至AT&amp;T机构Unix版本的SystemV的IPC方式，第二个支持BSD版本Unix基于socket不同主机通信方式，另外还支持Posix标准下的IPC通信方式。</p>
+
+<p>Linux系统下共享内存通常是单独创建作为公共存储空间存在的，一般情况下共享内存创建之后并不会随着单次的进程数据通信完成而销毁。由于共享内存是随内核持续的，因此共享内存可以长存系统中，直至系统重启。对于大数据量应用的生产型系统，Linux下共享内存有着广泛的应用。</p>
+
+<p>1.Linux上共享内存创建管理</p>
+
+<p>Linux系统中共享内存为一块实际分配的内存区域，该内存区域可以被映射到不同进程的地址空间，被不同的进程所共享。共享内存是进程IPC通信中最快的方式，读写只需将通信的数据直接从映射的共享内存执行单次拷贝即可。</p>
+
+<p>通常情况下系统中每个共享内存对象都对应着一个特殊文件，在Linux内核中通常是通过特殊文件系统中创建一个同共享内存名称的特殊文件，而共享内存到进程地址空间的映射也是映射到相应文件系统中同名特殊文件的过程。与mmap系统调用的共享内存方式不同的是，该特殊文件并不能当作普通文件使用读写操作来访问，而是通过将特殊文件映射到进程地址空间，直接采用内存访问操作方式来访问应用的。</p>
+
+<p>正由于此原因，共享内存并没与针对其读写操作提供相应的系统调用操作，因为映射到进程地址空间的共享内存完全可以通过操作内存拷贝的方式来访问对应的共享空间。系统中针对每块共享内存，即每个共享内存操作对象都分配有相应的一个名为shmid_kernel的控制结构，存储着与相应特殊文件系统相关联的信息。Linux内核中针对共享内存中该结构体信息如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-keyword">struct</span> shmid_kernel
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span> kern_ipc_perm    shm_perm;
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span> file*            shm_file;
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span>                 id;
+</div><div class="hljs-line">    <span class="hljs-keyword">unsigned</span>    <span class="hljs-keyword">long</span>            shm_nattch;
+</div><div class="hljs-line">    <span class="hljs-keyword">unsigned</span>    <span class="hljs-keyword">long</span>            shm_segsz;
+</div><div class="hljs-line">    <span class="hljs-keyword">time_t</span>              shm_atim;
+</div><div class="hljs-line">    <span class="hljs-keyword">time_t</span>              shm_dtim;
+</div><div class="hljs-line">    <span class="hljs-keyword">time_t</span>              shm_ctim;
+</div><div class="hljs-line">    <span class="hljs-keyword">pid_t</span>                   shm_cprid;
+</div><div class="hljs-line">    <span class="hljs-keyword">pid_t</span>                   shm_lprid;
+</div><div class="hljs-line">};
+</div></code></pre>
+
+<p>该结构体中shm_file存储了将要被映射的文件地址，每个共享内存区域都对应着一个特殊文件，内核中通过结构体ipc_ids定义的shm_ids对象来维护系统中所有的共享内存块信息，shm_ids可以通过内核实现方式访问所有的共享内存区域。 <br>
+1）共享内存创建</p>
+
+<p>Linux操作系统针对共享内存操作提供了一系列的系统调用操作接口，主要包括shmget、shmat以及shmdt三种，另外还包含共享内存控制系统调用shmctl将会在后续章节介绍。</p>
+
+<p>下面将会主要针对shmget（共享内存创建）、shmat（共享内存到进程地址的映射）以及shmat（解除共享内存与进程地址的映射）三种系统调用作详细的介绍，后面将会针对这三个系统调用应用使用完整实例来进一步加深共享内存操作的印象。</p>
+
+<p>首先介绍共享内存有关的第一个系统调用shmget接口方法，系统中针对shmget方法提供原型如下。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/shm.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">shmget</span><span class="hljs-params">(<span class="hljs-keyword">key_t</span> key,<span class="hljs-keyword">int</span> size,<span class="hljs-keyword">int</span> shmflg)</span></span>;
+</div></code></pre>
+
+<p>共享内存接口方法使用同样需要包含一些头文件定义，上述两个头文件包含确保应用程序中可以正确使用Linux系统提供的共享内存操作方法接口。shmget方法为创建共享内存的操作接口，该方法拥有三个函数参数，分别表示创建共享内存的键、需要创建的共享内存大小以及创建的共享内存的存储权限。</p>
+
+<p>该方法接口调用会返回一个整型值，如果系统调用创建共享内存失败，那么该函数将会返回值为-1。如果系统调用创建共享内存成功，则会返回新的共享内存块的标识号即id。shmget方法不仅仅针对系统中不存在的共享内存块的创建工作，当当前需要指定创建的共享内存已经存在时，则可以使用该方法获取该共享内存块的id，获取该值用于应用程序中其它部分处理。</p>
+
+<p>a.共享内存创建方法接口三个参数分别有着不同的作用。第一个参数为共享内存的key，唯一标识系统中一块共享内存，也称为共享内存唯一名字。共享内存key值为一个整型数，该值可以取值为0，创建一块私用的共享内存。在实际应用系统中，可以通过配置文件设定相应的共享内存key值，通过统一指定值来管理系统中共享内存创建使用工作。</p>
+
+<p>b.该方法第二个参数为共享内存创建时指定的大小，参数size为整型值表示共享内存创建的长度，该参数表示的大小是以字节为单位的，如果需要创建一个10M大小的共享内存则该参数大小设定为10000*1024字节。</p>
+
+<p>c.第三个参数shmflg主要指定共享内存创建时的标志，主要包含IPC_CREAT与IPC_EXCL两个标志，其中IPC_CREAT表示如果系统中指定的共享内存不存在，则创建一块新的共享内存，否则打开获取共享内存的操作符。IPC_EXCL则表示只有共享内存不存在的时，新的共享内存才会创建，否则将会报错。通常IPC_CREAT与IPC_EXCL两个标志值会配合一起使用，中间采用或运算来连接，保证创建的共享内存为新的，此时如果需要创建的共享内存已经存在的，则该方法会返回-1，而不会打开已有的共享内存操作符。</p>
+
+<p>该参数中上述标志值还会配合SHM_W与SHM_R两个控制模式用于根据需求指定新创建的共享内存读写的许可。其中两个标志值范围不同，表示的可读写的权限的不同。通常标志值大于整数3则表示当前组内读写许可权限，而标志值大于6则表示全局可读写权限的许可，该标志值可以根据实际需求在应用程序中使用#define来指定并使用。</p>
+
+<p>shmget系统调用方法在应用程序中会返回一个整型值，如果该返回值为-1则表示创建共享内存不成功，可以通过系统中提供的错误值来简单判断创建过程中所产生的错误。系统提供的错误值标识为errno，该值有几个表示常见错误的值说明，比如EINVAL表示创建过程中指定的共享内存大小size参数超过设定的范围，因为不同的系统中针对共享内存默认创建的最大与最小有某种规约的设定，如果指定的大小超出该范围，则会报出相应错误号。</p>
+
+<p>实际开发的应用程序中，可以针对标准提供的错误号作简单的创建后的判断，为系统程序在执行时错误的排除提供一定的线索。 <br>
+2）共享内存映射</p>
+
+<p>Linux系统下共享内存创建完毕之后，自然是进程需要链接到相应共享内存之上，从而通过共享内存来实现不同进程之间的数据通信。共享内存创建之后，仅仅为一块实际的内存空间，此时并没有任何进程挂接在上面。通过系统提供的方法接口shmat方法，应用进程可以attach到相应的共享内存块上，从而进行相应的通信处理。下面将会针对共享内存的映射方法接口作详细的讲述。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/shm.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">void</span> *<span class="hljs-title">shmat</span><span class="hljs-params">(<span class="hljs-keyword">int</span> shmid,<span class="hljs-keyword">const</span> <span class="hljs-keyword">void</span> *shmaddr,<span class="hljs-keyword">int</span> shmflg)</span></span>;
+</div></code></pre>
+
+<p>该系统接口方法主要用于将指定id的共享内存映射到当前应用进程的地址空间中，其中共享内存可操作的地址将会由参数shmaddr与参数shmflg共同来设置决定。如果shmaddr参数默认设定为NULL值，那么系统将会选择一个合适的共享内存链接到进程空间的首地址。</p>
+
+<p>参数shmid为共享内存在系统中的标识值，该值为shmget方法创建并返回的共享内存标识号。参数shmaddr为指向共享内存映射到进程空间的首地址，如果设定为NULL，则系统会返回一个合适的共享内存可操作的地址供应用程序读写操作使用。第三个参数shmflg为系统调用中提供的标志值设定，该标志值有三种。标志值为SHM_RND表示如果参数shmaddr为非NULL，则返回的共享内存操作地址将会在低边界可用地址上，可以是低边界地址的整数倍。</p>
+
+<p>如果shmaddr地址指定为非空，那么标志值SHM_RND未指定，则将会通过指定的shmaddr地址来链接共享内存。而第二个标志值SHM_RDONLY表示指定shmid的共享内存块以只读的方式映射到进程地址空间，获取的首地址只能读取其中的数据。第三个标志值SHM_REMAP表示允许调用者将一块共享内存区域映射到进程自身的内存空间中，如果该标志未被设置，用户传入的地址shmaddr就必须不能与进程中拥有的任何内存地址重合，如果设定了该值则意味着替换掉与指定shmaddr地址重合的共享内存段的映射。</p>
+
+<p>该系统调用方法如果执行成功，会返回相应的映射的共享内存可操作首地址供attach上共享内存的进程读写应用。而调用失败则会返回(void*)-1值，同样调用该方法后也可以针对系统提供的基本常见错误标志作一些判断处理工作。该方法错误标志可以为EACCES，表示操作的进程没有足够的操作共享内存块的权限，ENOMEM内存不足，没有办法为其分配相应的页表等错误。 <br>
+3）共享内存释放</p>
+
+<p>与shmat方法相反，Linux系统调用提供了shmdt方法用于解除共享内存与当前进程之间的映射关系，即将进程与共享内存相互分离的过程。Linux提供的该方法的系统调用函数原型如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/shm.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">shmdt</span><span class="hljs-params">(<span class="hljs-keyword">const</span> <span class="hljs-keyword">void</span>* shmaddr)</span></span>;
+</div></code></pre>
+
+<p>shmdt操作主要用于将当前进程与共享内存之间的映射关系解除，对于共享内存状态中会有专门保存当前attach上该内存的进程数。当应用进程调用该方法时，系统会自动将attach上共享内存的进程数减1，而调用shmat时会自动增加1表示当前连接到共享内存上操作的进程数。</p>
+
+<p>该方法只有一个参数，要求该参数必须为shmat映射时返回的可操作的共享内存首地址，成功解除映射时该函数会返回整型值0，否则返回-1。需要注意的是，该方法的调用并不会将系统中创建的共享内存删除，仅仅是用于分离当前进程地址空间与共享内存块的地址映射关系。另外attach上去的进程也会随着消亡而释放与共享内存之间的映射关系，与attach操作相反的是该方法称为detach共享内存操作。</p>
+
+<p>4）共享内存操作工具ipcs</p>
+
+<p>系统中存在的共享内存信息，依然可以通过Linux提供的ipcs工具来操作。ipcs工具主要用于Linux系统下IPC资源操作，针对消息队列、信号量以及共享内存都有相关的选项来操作系统中相应的IPC方式的资源。</p>
+
+<p>对于共享内存，ipcs工具则提供了-m选项功能。用户使用ipcs命令配合-m选项可以查看系统中相应共享内存的基本信息。当前Linux系统shell下敲ipcs –m命令，回车之后出现的基本信息界面如下。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs lsl"><div class="hljs-line">[developer@localhost test]$ ipcs -m
+</div><div class="hljs-line">------ Shared Memory Segments --------
+</div><div class="hljs-line"><span class="hljs-type">key</span>         shmid       owner       perms      bytes      nattch     status
+</div><div class="hljs-line"><span class="hljs-number">0x00000000</span>  <span class="hljs-number">0</span>           developer   <span class="hljs-number">777</span>        <span class="hljs-number">393216</span>     <span class="hljs-number">2</span>          dest
+</div><div class="hljs-line"><span class="hljs-number">0x00000000</span>  <span class="hljs-number">32769</span>       root        <span class="hljs-number">644</span>        <span class="hljs-number">106496</span>     <span class="hljs-number">2</span>          dest
+</div><div class="hljs-line"><span class="hljs-number">0x00977998</span>  <span class="hljs-number">98306</span>       developer   <span class="hljs-number">600</span>        <span class="hljs-number">2000</span>         <span class="hljs-number">0</span>
+</div></code></pre>
+
+<p>当前系统中存在三个共享内存块，其中属于root用户下指定权限为644的共享内存块，以及一个shmid为0的特殊共享内存块，第三个则为当前开发用户下通过应用程序创建的key值为0x00977998，相应的执行权限为600，对应的大小为2000个字节的共享内存块，并且通过其中nattch字段信息显示表明当前并没有进程attach映射到该共享内存块进行可能的读写操作。</p>
+
+<p>通过前面介绍的释放方法接口并不能真正的删除系统中的共享内存块，在ipcs工具中可以通过ipcrm命令配合-m选项，并且指定相应需要删除的共享内存shmid号即可。如上用户创建的shmid为98306的共享内存块，可以通过如下命令真正的删除释放系统中共享内存资源，删除信息如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs lsl"><div class="hljs-line">[developer@localhost test]$ ipcrm -m <span class="hljs-number">98306</span>
+</div><div class="hljs-line">[developer@localhost test]$ ipcs -m
+</div><div class="hljs-line">------ Shared Memory Segments --------
+</div><div class="hljs-line"><span class="hljs-type">key</span>        shmid      owner      perms      bytes      nattch     status
+</div><div class="hljs-line"><span class="hljs-number">0x00000000</span> <span class="hljs-number">0</span>          developer <span class="hljs-number">777</span>        <span class="hljs-number">393216</span>     <span class="hljs-number">2</span>          dest
+</div><div class="hljs-line"><span class="hljs-number">0x00000000</span> <span class="hljs-number">32769</span>      root      <span class="hljs-number">644</span>        <span class="hljs-number">106496</span>     <span class="hljs-number">2</span>          dest
+</div></code></pre>
+
+<p>通过上述删除命令后，查询相应的共享内存信息会发现，用户创建的共享内存块资源已经被删除。或者也可以通过ipcrm命令配合-M选项，后面紧跟需要删除的共享内存块的key值实现同样的功能。</p>
+
+<p>5）共享内存创建完成实例</p>
+
+<p>Linux系统下共享内存创建通过系统调用shmget方法实现，该接口方法提供的参数为3个，分别为共享内存的key值、共享内存的指定大小以及共享内存创建的标记。通常应用程序中共享内存操作离不开系统调用的三个操作步骤，通过shmget方法创建共享内存块，通过shmat方法映射共享内存与进程地址空间，以及读写操作共享内存，最后通过shmdt方法来释放这种映射关系。</p>
+
+<p>下面通过一个完整的实例，讲述Linux系统下共享内存创建基本操作过程，实例代码编辑如下所示。 <br>
+a.准备实例</p>
+
+<p>打开UE工具，创建新的空文件并且另存为chapter2501.cpp。该代码文件随后会同makefile文件一起通过FTP工具传输至Linux服务器端，客户端通过scrt工具访问操作。程序代码文件编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-comment">/**</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 实例chapter2501</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 源文件chapter2501.cpp</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 共享内存创建应用实例</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/shm.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/stat.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;unistd.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">ifndef</span>     SHM_FAILED                  <span class="hljs-comment">//定义方法调用出错常量符号</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span>     SHM_FAILED -1</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">endif</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> FLAG IPC_CREAT|IPC_EXCL|SHM_R|SHM_W                <span class="hljs-comment">//定义共享内存创建标志</span></span>
+</div><div class="hljs-line"><span class="hljs-comment">//内存数据记录结构定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">typedef</span> <span class="hljs-keyword">struct</span>
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> id;                         <span class="hljs-comment">//数据编号</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">char</span> data[<span class="hljs-number">100</span>];                     <span class="hljs-comment">//具体数据空间定义</span>
+</div><div class="hljs-line">}recordData;
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> shmid;                      <span class="hljs-comment">//共享内存描述符</span>
+</div><div class="hljs-line">    recordData *memoryAddr;                 <span class="hljs-comment">//记录结构指针对象</span>
+</div><div class="hljs-line">    shmid = shmget(<span class="hljs-number">0x00000003</span>,<span class="hljs-number">10</span>*<span class="hljs-number">1024</span>,FLAG);        <span class="hljs-comment">//共享内存创建方法调用，返回值初始化描述符</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(shmid == SHM_FAILED)                 <span class="hljs-comment">//判断创建工作是否成功</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"share memory create fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;    <span class="hljs-comment">//不成功则打印输出提示信息</span>
+</div><div class="hljs-line">        <span class="hljs-built_in">exit</span>(<span class="hljs-number">1</span>);                    <span class="hljs-comment">//退出进程</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    memoryAddr = (recordData*)shmat(shmid,<span class="hljs-literal">NULL</span>,<span class="hljs-number">0</span>);      <span class="hljs-comment">//进程attach到共享内存，获取其操作首地址</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">char</span> temp;                      <span class="hljs-comment">//定义字符临时变量</span>
+</div><div class="hljs-line">    temp = <span class="hljs-number">65</span>;                      <span class="hljs-comment">//为该变量初始化ASCII值</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>;i &lt; <span class="hljs-number">5</span>;i++)                <span class="hljs-comment">//循环写入数据</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">memcpy</span>((*(memoryAddr+i)).data,&amp;temp,<span class="hljs-number">1</span>);     <span class="hljs-comment">//拷贝数据进入共享内存</span>
+</div><div class="hljs-line">        (*(memoryAddr+i)).id = i;                   <span class="hljs-comment">//数据id赋值</span>
+</div><div class="hljs-line">        ++temp;                             <span class="hljs-comment">//递增temp值</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(shmdt(memoryAddr) !=<span class="hljs-number">0</span>)                       <span class="hljs-comment">//操作完毕后detach共享内存</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"share memory detach fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;            <span class="hljs-comment">//执行失败提示信息</span>
+</div><div class="hljs-line">        <span class="hljs-built_in">exit</span>(<span class="hljs-number">1</span>);                            <span class="hljs-comment">//退出进程</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>b.准备Makefile <br>
+Linux平台下需要编译的源文件为chapter2501.cpp，相关makefile工程文件编译命令编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs avrasm"><div class="hljs-line">OBJECTS=chapter2501.o
+</div><div class="hljs-line">CC=g++
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-symbol">chapter2501:</span> $(OBJECTS)
+</div><div class="hljs-line">    $(CC) $(OBJECTS) -g -o chapter2501
+</div><div class="hljs-line"><span class="hljs-symbol">clean:</span>
+</div><div class="hljs-line">    rm -f chapter2501 core $(OBJECTS)
+</div><div class="hljs-line"><span class="hljs-symbol">submit:</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">cp</span> -f -r chapter2501 ../bin
+</div></code></pre>
+
+<p>上述makefile文件套用前面的模板格式，主要替换了代码文件、程序编译中间文件、可执行程序等。在编译命令部分-g选项的加入，表明程序编译同时加入了可调式信息。</p>
+
+<p>c.编译运行程序</p>
+
+<p>当前shell下执行make命令，生成可执行程序文件，随后通过makesubmit命令提交程序文件至本实例bin目录，通过cd命令定位至bin目录，执行该程序文件运行结果如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs elixir"><div class="hljs-line">[developer<span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>make
+</div><div class="hljs-line">g++    -c -o chapter2501.o chapter2501.cpp
+</div><div class="hljs-line">g++ chapter2501.o -g -o chapter2501
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>make submit
+</div><div class="hljs-line">cp -f -r chapter2501 ../bin
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> src]<span class="hljs-variable">$ </span>cd ../bin
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> bin]<span class="hljs-variable">$ </span>./chapter2501
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> bin]<span class="hljs-variable">$ </span>ipc -m
+</div><div class="hljs-line">-<span class="hljs-symbol">bash:</span> <span class="hljs-symbol">ipc:</span> command <span class="hljs-keyword">not</span> found
+</div><div class="hljs-line">[developer <span class="hljs-variable">@localhost</span> bin]<span class="hljs-variable">$ </span>ipcs -m
+</div><div class="hljs-line">------ Shared Memory Segments --------
+</div><div class="hljs-line">key        shmid      owner      perms      bytes      nattch     status      
+</div><div class="hljs-line"><span class="hljs-number">0x00000003</span> <span class="hljs-number">0</span>          billing   <span class="hljs-number">600</span>        <span class="hljs-number">10240</span>      <span class="hljs-number">0</span>
+</div></code></pre>
+
+<p>本实例中主要演示利用系统调用，创建并写入数据至共享内存的过程。首先使用相关共享内存系统调用需要包含相应的头文件，并且通过宏自定义SHM_FAILED表示共享内存创建错误标志值。同时定义符号FLAG，用于表示共享内存创建时的标志值，该标志值表示如果系统中不存在相应key值得共享内存，则创建共享内存并且允许对该共享内存读写。</p>
+
+<p>在共享内存中写入记录式数据，需要定义结构体来表示。结构体recordData主要包含两个成员变量，分为为id与data表示记录编号以及记录数据。主应用程序中，定义整型变量shmid表示共享内存shmget方法调用后返回的id。同时定义记录结构体对象指针，用于获取可操作的共享内存首地址。</p>
+
+<p>调用shmget系统函数，根据传入的参数创建key值为0x00000003，大小为10KB的共享内存，并且标志值为FLAG。将调用结果赋值给shmid变量，随后判断该系统调用是否成功，如果shmid值为-1表明共享内存创建失败，否则程序继续执行下去。</p>
+
+<p>调用shmat方法，将共享内存地址映射到进程空间，并且返回可操作共享内存的首地址。由于该方法返回的是void*类型的地址指针，所以实际应用中需要额外的强制转换，将其转换为需要存放的记录指针形式。调用该方法，传入shmget函数返回的共享内存id，并且选择由系统自动提供一个可操作共享内存的首地址，赋值给当前的记录对象指针，即此时该对象指针指向了可操作共享内存的首地址。</p>
+
+<p>下面就可以采用该对象指针来操作所指向的内存空间，首先定义字符变量temp，初始化值为65，即为字符‘A’。通过for循环控制结构，开始向共享内存空间中写入数据5条记录数据。循环体中整型记录数据可以通过直接赋值，而字符数组数据将会通过memcpy内存直接拷贝的方式来写入。</p>
+
+<p>通过首地址memoryAddr偏移来将相应的数据放入对应的记录中，其中变量memoryAddr+i即实现每写入一个结构记录，操作的地址指针将会移向下一个记录空间供写入数据。最后不要忘记操作完共享内存后，将进程地址空间与共享内存之间的映射关系解除。</p>
+
+<p>上述程序执行完毕之后，通过ipcs –m命令组合可以查询到新建的共享内存基本信息，从而确定共享内存创建是否成功。</p>
+
+<p>至于数据写入是否正确，下面将会通过共享内存读取程序实例来验证，代码如下。</p>
+
+<p>a.准备实例</p>
+
+<p>打开UE工具，创建新的空文件并且另存为chapter2502.cpp。该代码文件随后会同makefile文件一起通过FTP工具传输至Linux服务器端，客户端通过scrt工具访问操作。程序代码文件编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-comment">/**</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 实例chapter2502</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 源文件chapter2502.cpp</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 共享内存读取操作实例</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/shm.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/stat.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;unistd.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">ifndef</span> SHM_FAILED                              <span class="hljs-comment">//方法调用错误返回值常量符号定义</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> SHM_FAILED -1</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">endif</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> FLAG IPC_CREAT|0666                     <span class="hljs-comment">//创建方法标志常量符号定义</span></span>
+</div><div class="hljs-line"><span class="hljs-comment">//共享内存数据记录结构定义</span>
+</div><div class="hljs-line"><span class="hljs-keyword">typedef</span> <span class="hljs-keyword">struct</span>
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> id;                                     <span class="hljs-comment">//数据编号</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">char</span> data[<span class="hljs-number">100</span>];                                 <span class="hljs-comment">//数据正文</span>
+</div><div class="hljs-line">}recordData;
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> shmid;                                      <span class="hljs-comment">//共享内存描述符</span>
+</div><div class="hljs-line">    recordData *memoryAddr;                         <span class="hljs-comment">//记录结构指针对象</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">char</span> buffer[<span class="hljs-number">1024</span>];                              <span class="hljs-comment">//缓冲区定义</span>
+</div><div class="hljs-line">    shmid = shmget(<span class="hljs-number">0x00000003</span>,<span class="hljs-number">10</span>*<span class="hljs-number">1024</span>,FLAG);            <span class="hljs-comment">//调用创建共享内存方法，返回值初始化描述符</span>
+</div><div class="hljs-line">    memoryAddr = (recordData*)shmat(shmid,<span class="hljs-literal">NULL</span>,<span class="hljs-number">0</span>);      <span class="hljs-comment">//当前进程attach到共享内存，返回首地址</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>;i &lt; <span class="hljs-number">5</span>;i++)                                <span class="hljs-comment">//循环从共享内存读取数据记录操作</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"id:"</span>&lt;&lt;(*(memoryAddr+i)).id&lt;&lt;<span class="hljs-string">" "</span>;         <span class="hljs-comment">//打印输出记录编号</span>
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"data:"</span>&lt;&lt;(*(memoryAddr+i)).data&lt;&lt;<span class="hljs-built_in">endl</span>;        <span class="hljs-comment">//打印输出相应数据</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(shmdt(memoryAddr) !=<span class="hljs-number">0</span>)                       <span class="hljs-comment">//调用detach脱离共享内存</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"share memory detach fail!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">        <span class="hljs-built_in">exit</span>(<span class="hljs-number">1</span>);  
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>b.准备Makefile <br>
+Linux平台下需要编译源文件为chapter2502.cpp，相关makefile工程文件编译命令编辑如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs avrasm"><div class="hljs-line">OBJECTS=chapter2502.o
+</div><div class="hljs-line">CC=g++
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-symbol">chapter2502:</span> $(OBJECTS)
+</div><div class="hljs-line">    $(CC) $(OBJECTS) -g -o chapter2502
+</div><div class="hljs-line"><span class="hljs-symbol">clean:</span>
+</div><div class="hljs-line">    rm -f chapter2502 core $(OBJECTS)
+</div><div class="hljs-line"><span class="hljs-symbol">submit:</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">cp</span> -f -r chapter2502 ../bin
+</div></code></pre>
+
+<p>上述makefile文件套用前面的模板格式，主要替换了代码文件、程序编译中间文件、可执行程序等。在编译命令部分-g选项的加入，表明程序编译同时加入了可调式信息。</p>
+
+<p>c.编译运行程序</p>
+
+<p>当前shell下执行make命令，生成可执行程序文件，随后通过makesubmit命令提交程序文件至本实例bin目录，通过cd命令定位至bin目录，执行该程序文件运行结果如下所示。</p>
+
+
+
+<pre class="prettyprint hljs-dark"><code class="hljs groovy"><div class="hljs-line">[developer<span class="hljs-meta">@localhost</span> src]$ make
+</div><div class="hljs-line">g++    -c -o chapter2502.o chapter2502.cpp
+</div><div class="hljs-line">g++ chapter2502.o -g -o chapter2502
+</div><div class="hljs-line">[developer <span class="hljs-meta">@localhost</span> src]$ make submit
+</div><div class="hljs-line">cp -f -r chapter2502 ../bin
+</div><div class="hljs-line">[developer <span class="hljs-meta">@localhost</span> src]$ cd ../bin
+</div><div class="hljs-line">[developer <span class="hljs-meta">@localhost</span> bin]$ ./chapter2502
+</div><div class="hljs-line"><span class="hljs-string">id:</span><span class="hljs-number">0</span> <span class="hljs-string">data:</span>A
+</div><div class="hljs-line"><span class="hljs-string">id:</span><span class="hljs-number">1</span> <span class="hljs-string">data:</span>B
+</div><div class="hljs-line"><span class="hljs-string">id:</span><span class="hljs-number">2</span> <span class="hljs-string">data:</span>C
+</div><div class="hljs-line"><span class="hljs-string">id:</span><span class="hljs-number">3</span> <span class="hljs-string">data:</span>D
+</div><div class="hljs-line"><span class="hljs-string">id:</span><span class="hljs-number">4</span> <span class="hljs-string">data:</span>E
+</div></code></pre>
+
+<p>本实例主要演示了从进程attach共享内存中读取相应数据的过程，大致实现过程与创建写入数据过程类似，仅仅是获取到可操作共享内存地址之后，通过取地址内容操作，将相应的内存空间中的数据打印输出出来，程序运行结果正确的将输入的数据从共享内存中读取出来。</p>
+
+<p>2.Linux上共享内存控制管理</p>
+
+<p>Linux系统共享内存操作提供了针对共享内存块相应的控制方法，主要可以通过指定相应的共享内存id，获取并设置系统中指定共享内存基本信息，并且可以删除指定共享内存块以及锁定等操作。下面将会详细介绍Linux下共享内存控制操作的应用情况。</p>
+
+<p>1）共享内存基本信息结构</p>
+
+<p>Linux系统内核针对每块共享内存块都维护着一个基本信息结构体shmid_ds，共享内存控制方法可以操作该结构体获取相应指定共享内存基本信息，同时也可以重新设置该结构体中基本信息。</p>
+
+<p>系统中共享内存基本信息结构体shmid_ds为Linux系统内核维护，该结构体定义实现如下所示。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-keyword">struct</span> shmid_ds
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">struct</span>  ipc_perm    shm_perm;   <span class="hljs-comment">//共享内存访问权限</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span>     shm_segsz;      <span class="hljs-comment">//共享内存大小</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">pid_t</span>       shm_lpid;       <span class="hljs-comment">//共享内存最后操作用户进程id</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">pid_t</span>       shm_cpid;       <span class="hljs-comment">//共享内存创建用户进程id</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">shmatt_t</span>    shm_nattach;        <span class="hljs-comment">//当前共享内存进程attach数</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">unsigned</span>    <span class="hljs-keyword">short</span>    shm_cnattach;
+</div><div class="hljs-line">    <span class="hljs-keyword">time_t</span>  shm_atime;          <span class="hljs-comment">//最后一次映射共享内存的时间</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">time_t</span>  shm_dtime;          <span class="hljs-comment">//最后一次取消映射共享内存的时间</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">time_t</span>  shm_ctime;          <span class="hljs-comment">//最后一次修改共享内存时间</span>
+</div><div class="hljs-line">};
+</div></code></pre>
+
+<p>而共享内存基本信息获取设置则是通过操作该结构体基本信息实现的，采用共享内存控制方法可以在应用程序中实现类似ipcs工具所提供的功能操作。其中shmid_ds结构体中成员ipc_perm为结构体对象成员，该结构体主要为共享内存信息key值、所属用户id以及共享内存存取模式标志等。该结构体同样为Linux系统内核定义维护，该结构体基本定义如下所示。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs cs"><div class="hljs-line"><span class="hljs-keyword">struct</span> ipc_perm
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    key_t   key;                <span class="hljs-comment">//共享内存key</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">ushort</span>  uid;                <span class="hljs-comment">//共享内存所属用户euid与egid</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">ushort</span>  gid;
+</div><div class="hljs-line">    <span class="hljs-keyword">ushort</span>  cuid;               <span class="hljs-comment">//共享内存创建者euid与egid</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">ushort</span>  cgid;
+</div><div class="hljs-line">    <span class="hljs-keyword">ushort</span>  mode;                   <span class="hljs-comment">//低9位存取共享内存模式</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">ushort</span>  seq;                <span class="hljs-comment">//sequence number</span>
+</div><div class="hljs-line">};
+</div></code></pre>
+
+<p>通过系统中定义维护相关结构体信息，用户可以通过对外提供的共享内存控制接口来获取并操作。下面将会通过系统调用分析以及对应的演示实例来讲述共享内存控制方法的应用。</p>
+
+<p>2）共享内存控制</p>
+
+<p>系统中共享内存控制方法为shmctl，该方法根据传入具体的参数命令，实现控制共享内存的基本操作。共享内存控制中提供了相当多的参数分别表示对应的控制功能，系统调用中该方法原型如下所示。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/sem.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">shmctl</span><span class="hljs-params">(<span class="hljs-keyword">int</span> shmid,<span class="hljs-keyword">int</span> cmd,<span class="hljs-keyword">struct</span> shmid_ds *buf)</span></span>;
+</div></code></pre>
+
+<p>该系统调用主要根据传入的命令参数cmd，根据其指定相应的标志操作值，从而实现不同的共享内存控制功能。参数shmid主要为当前需要控制的共享内存id，结构体参数shmid_ds则为共享内存信息输入输出数据，其中参数cmd提供了几种标志值，分别表示调用该方法实现不同的控制功能。</p>
+
+<p>cmd参数中标志值主要有5种，分别表示控制功能中获取共享内存信息、设置共享内存信息、删除共享内存以及锁定和解锁共享内存。</p>
+
+<p>主要标志值为IPC_STAT，根据传入的共享内存标识id参数，获取该块共享内存基本信息，获取到的基本信息存放于结构体指针参数buf中，供应用获取处理。第二个标志值为IPC_SET，主要用于设置指定共享内存块基本信息，通过指定的共享内存id，将需要设置的共享内存信息通过结构体指针buf传入并设置。而标志值SHM_LOCK，则用户锁住当前标识为shmid的共享内存块，不允许其它用户使用，通常该选项设置必须是root用户才可以。与之对应的是SHM_UNLOCK标志值，表示功能正好相反。</p>
+
+<p>最后一个参数IPC_RMID则表示根据传入的共享内存shmid参数，删除系统中指定的共享内存块。该系统调用与前面共享内存操作相同，调用会返回一个整型值，失败返回-1，成功返回值为0。后面将会通过一个共享内存封装实例，其中部分方法演示共享内存控制shmctl方法在应用程序中的使用情况。</p>
+
+<p>3.共享内存操作封装实例</p>
+
+<p>通过前面Linux系统下共享内存系统的介绍，下面将会针对共享内存创建操作封装实现一个完整的共享内存创建管理类，将共享内存创建、映射以及基本的控制管理实现在该类中。共享内存操作类通过对外提供公共接口，在外部应用程序中可以包含该类的头文件定义，直接使用该类对象实例操作共享内存基本创建以及管理，并且可以将封装操作创建成静态库的方式供应用程序中连接使用。</p>
+
+<p>该实例中主要提供共享内存创建、析构、挂接以及去挂接的接口方法，实例代码编辑如下所示。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-comment">//共享内存操作库头文件MyShareMemory.h</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">ifndef</span> MYSHAREMEMORY_H</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> MYSHAREMEMORY_H</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;iostream&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;string&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/shm.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/ipc.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;sys/types.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">&lt;unistd.h&gt;</span></span>
+</div><div class="hljs-line"><span class="hljs-keyword">using</span> <span class="hljs-keyword">namespace</span> <span class="hljs-built_in">std</span>;
+</div><div class="hljs-line"><span class="hljs-comment">//共享内存操作类</span>
+</div><div class="hljs-line"><span class="hljs-keyword">class</span> MyShareMemory
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">public</span>:
+</div><div class="hljs-line">        MyShareMemory(<span class="hljs-keyword">int</span> key, <span class="hljs-keyword">int</span> size, <span class="hljs-keyword">int</span> flag);     <span class="hljs-comment">//共享内存操作类构造函数</span>
+</div><div class="hljs-line">        ~MyShareMemory();                  <span class="hljs-comment">//共享内存操作类析构函数</span>
+</div><div class="hljs-line">        <span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">createMemory</span><span class="hljs-params">()</span></span>;                    <span class="hljs-comment">//创建共享内存方法</span>
+</div><div class="hljs-line">        <span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">destroyMemory</span><span class="hljs-params">()</span></span>;                   <span class="hljs-comment">//销毁共享内存方法</span>
+</div><div class="hljs-line">        <span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">attachMemory</span><span class="hljs-params">(<span class="hljs-keyword">char</span>*&amp; pmemoryAddr)</span></span>;          <span class="hljs-comment">//attach共享内存方法</span>
+</div><div class="hljs-line">        <span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">detachMemory</span><span class="hljs-params">(<span class="hljs-keyword">char</span>* pmemoryAddr)</span></span>;           <span class="hljs-comment">//detach共享内存方法</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">private</span>:
+</div><div class="hljs-line">        <span class="hljs-keyword">int</span> m_key;                                  <span class="hljs-comment">//共享内存key</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">int</span> m_size;                                 <span class="hljs-comment">//共享内存大小</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">int</span> m_flag;                                 <span class="hljs-comment">//共享内存创建标志</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">int</span> m_shmid;                                    <span class="hljs-comment">//共享内存描述符</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">char</span> *m_memoryAddr;                                 <span class="hljs-comment">//共享内存地址指针</span>
+</div><div class="hljs-line">};
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">endif</span></span>
+</div><div class="hljs-line"><span class="hljs-comment">//共享内存操作库源文件MyShareMemory.cpp</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">"MyShareMemory.h"</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">ifndef</span> SHM_FAILED</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> SHM_FAILED -1</span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">endif</span></span>
+</div><div class="hljs-line"><span class="hljs-comment">/*</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数功能：共享内存操作构造函数</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数参数：key，共享内存指定key值；size，共享内存大小；flag，共享内存创建标志</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 返 回 值：无</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line">MyShareMemory::MyShareMemory(<span class="hljs-keyword">int</span> key, <span class="hljs-keyword">int</span> size, <span class="hljs-keyword">int</span> flag)
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    m_flag = flag;                              <span class="hljs-comment">//初始化共享内存类数据成员</span>
+</div><div class="hljs-line">        m_key  = key ;
+</div><div class="hljs-line">        m_size = size;
+</div><div class="hljs-line">        m_flag = flag;
+</div><div class="hljs-line">        m_shmid   = <span class="hljs-number">-1</span>;
+</div><div class="hljs-line">        m_memoryAddr = <span class="hljs-literal">NULL</span>;
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">/*</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数功能：共享内存操作析构函数</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数参数：无</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 返 回 值：无</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line">MyShareMemory::~MyShareMemory()
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(m_memoryAddr != <span class="hljs-literal">NULL</span>)                        <span class="hljs-comment">//获取共享内存地址不为空</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        detachMemory(m_memoryAddr);                    <span class="hljs-comment">//将会调用detach方法来脱离共享内存</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">/*</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数功能：共享内存创建操作方法</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数参数：无</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 返 回 值：成功创建返回true，否则返回false</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line"><span class="hljs-keyword">bool</span> MyShareMemory::createMemory()
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    m_shmid = shmget(m_key, m_size, m_flag);                  <span class="hljs-comment">//调用创建共享内存方法，返回值初始化描述符</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">if</span> (m_shmid == <span class="hljs-number">-1</span>)                            <span class="hljs-comment">//如果创建不成功</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;                             <span class="hljs-comment">//返回false</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    m_memoryAddr = <span class="hljs-keyword">reinterpret_cast</span>&lt;<span class="hljs-keyword">char</span>*&gt;(shmat(m_shmid, <span class="hljs-literal">NULL</span>, <span class="hljs-number">0</span>));      <span class="hljs-comment">//attach到共享内存，返回首地址</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">if</span> (m_memoryAddr == (<span class="hljs-keyword">char</span>*)SHM_FAILED)                        <span class="hljs-comment">//如果返回地址为空</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;                             <span class="hljs-comment">//说明attach不成功返回false</span>
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;                                  <span class="hljs-comment">//否则成功返回true</span>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">/*</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数功能：共享内存创销毁操作方法</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数参数：无</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 返 回 值：成功创建返回true，否则返回false</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line"><span class="hljs-keyword">bool</span> MyShareMemory::destroyMemory()
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (m_shmid == <span class="hljs-number">-1</span>)                          <span class="hljs-comment">//判断相应的共享内存描述符是否为-1</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;                               <span class="hljs-comment">//为-1则直接返回false</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">if</span> (m_memoryAddr != <span class="hljs-literal">NULL</span>)                       <span class="hljs-comment">//判断相应首地址是否为空</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            <span class="hljs-keyword">if</span> (shmdt(m_memoryAddr) != <span class="hljs-number">0</span>)                   <span class="hljs-comment">//如果不为空则detach脱离共享内存</span>
+</div><div class="hljs-line">                <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;                       <span class="hljs-comment">//方法调用不成功则返回false</span>
+</div><div class="hljs-line">            m_memoryAddr = <span class="hljs-literal">NULL</span>;                        <span class="hljs-comment">//否则脱离之后将其直接置NULL空值</span>
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">        <span class="hljs-keyword">if</span> (shmctl(m_shmid, IPC_RMID, <span class="hljs-literal">NULL</span>) != <span class="hljs-number">0</span>)           <span class="hljs-comment">//调用共享内存控制方法，指定删除命令操作</span>
+</div><div class="hljs-line">            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;                       <span class="hljs-comment">//方法不成功返回false</span>
+</div><div class="hljs-line">        m_shmid = <span class="hljs-number">-1</span>;                           <span class="hljs-comment">//设置相应的描述符为-1初始值</span>
+</div><div class="hljs-line">        m_memoryAddr = <span class="hljs-literal">NULL</span>;                        <span class="hljs-comment">//设置首地址指针为空</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;                            <span class="hljs-comment">//成功返回true</span>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">/*</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数功能：共享内存挂接方法</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数参数：pmemoryAddr，共享内存挂接获取的首地址指针</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 返 回 值：成功创建返回true，否则返回false</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line"><span class="hljs-keyword">bool</span> MyShareMemory::attachMemory(<span class="hljs-keyword">char</span>*&amp; pmemoryAddr)
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    pmemoryAddr = <span class="hljs-literal">NULL</span>;                         <span class="hljs-comment">//初始化设置传入参数地址指针指向为空</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (m_shmid == <span class="hljs-number">-1</span>)                          <span class="hljs-comment">//判断相应的共享内存id是否存在</span>
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            m_shmid = shmget(m_key, <span class="hljs-number">0</span>, SHM_R|SHM_W);                    <span class="hljs-comment">//不存在则根据其数据成员重新创建</span>
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">        m_memoryAddr = <span class="hljs-keyword">reinterpret_cast</span>&lt;<span class="hljs-keyword">char</span>*&gt;(shmat(m_shmid, <span class="hljs-literal">NULL</span>, <span class="hljs-number">0</span>));    <span class="hljs-comment">//随后调用attach方法，返回地址</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">if</span> (m_memoryAddr == (<span class="hljs-keyword">char</span>*)SHM_FAILED)                          <span class="hljs-comment">//判断地址是否为空</span>
+</div><div class="hljs-line">            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;                           <span class="hljs-comment">//为空则返回false</span>
+</div><div class="hljs-line">        pmemoryAddr = <span class="hljs-keyword">reinterpret_cast</span>&lt;<span class="hljs-keyword">char</span>*&gt;(m_memoryAddr);                    <span class="hljs-comment">//否则强制转换类型赋给传入的指针参数</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;                            <span class="hljs-comment">//成功返回true</span>
+</div><div class="hljs-line">}
+</div><div class="hljs-line"><span class="hljs-comment">/*</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数功能：共享内存脱离方法</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 函数参数：pmemoryAddr，共享内存挂接获取的首地址指针</span>
+</div><div class="hljs-line"><span class="hljs-comment">* 返 回 值：成功创建返回true，否则返回false</span>
+</div><div class="hljs-line"><span class="hljs-comment">*/</span>
+</div><div class="hljs-line"><span class="hljs-keyword">bool</span> MyShareMemory::detachMemory(<span class="hljs-keyword">char</span>* pmemoryAddr)
+</div><div class="hljs-line">{
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (m_shmid == <span class="hljs-number">-1</span> || m_memoryAddr == <span class="hljs-literal">NULL</span>)          <span class="hljs-comment">//判断当前共享内存描述符以及首地址是否有效</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;                        <span class="hljs-comment">//如果已经无效则直接返回true</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (pmemoryAddr != (m_memoryAddr))                      <span class="hljs-comment">//判断获取到的首地址与当前首地址是否同一指向</span>
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;                           <span class="hljs-comment">//如果不同则说明不是脱离当前指定共享内存块</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">int</span> nCode = shmdt(m_memoryAddr);                <span class="hljs-comment">//调用相应detach方法，返回值赋给nCode</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span> (nCode != <span class="hljs-number">0</span>)                         <span class="hljs-comment">//如果该方法执行不成功，进行判断诊断</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-keyword">if</span>(errno == EINVAL)
+</div><div class="hljs-line">        {
+</div><div class="hljs-line">            m_memoryAddr = <span class="hljs-literal">NULL</span>;
+</div><div class="hljs-line">            <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"*Already shmdt*"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+</div><div class="hljs-line">        }
+</div><div class="hljs-line">        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    m_memoryAddr = <span class="hljs-literal">NULL</span>;
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>上述封装共享内存操作需要编译成静态库的源文件为MyShareMemory.cpp，编译过程如下所示。</p>
+
+<p>[developer@localhost sharememory]<span class="MathJax_Preview"></span><span class="MathJax_SVG" id="MathJax-Element-23-Frame" role="textbox" aria-readonly="true" style="font-size: 100%; display: inline-block;"><span><img type="image/png" width="572.781" height="17.9844" longdesc="__SVG__undefined" src="data:image/png;base64,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" style="margin-top:0;margin-bottom:0;"></span></span> ar -rsv libsharememory.a MyShareMemory.o <br>
+a - MyShareMemory.o <br>
+[developer@localhost sharememory]$ ll *.a <br>
+-rwx——    1 root     root         3628 Sep  6  2008 libsharememory.a</p>
+
+<p>通过前面章节介绍创建静态库的过程，将共享内存操作封装实现的源文件程序封装成静态库，上述操作过后，装有共享内存操作的静态库创建完毕。下面将会演示使用该静态库操作共享内存的过程。</p>
+
+<p>一旦确定为静态库的内容源文件设计开发并创建完毕后，应用程序中直接通过连接库文件进行操作，下面将会通过程序实例来演示封装实现的共享内存操作接口的使用情况，实例代码编译如下所示。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs cpp"><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">include</span> <span class="hljs-meta-string">"MyShareMemory.h"</span></span>
+</div><div class="hljs-line"><span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> FLAG IPC_CREAT|IPC_EXCL|SHM_R|SHM_W         <span class="hljs-comment">//共享内存创建标志常量符号</span></span>
+</div><div class="hljs-line"><wbr>
+</div><div class="hljs-line"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>
+</div><div class="hljs-line"><span class="hljs-function"></span>{
+</div><div class="hljs-line">    <span class="hljs-keyword">char</span> *pAddrMemory;                         <span class="hljs-comment">//定义字符指针用于指向获取共享内存首地址</span>
+</div><div class="hljs-line">    MyShareMemory *shareMemory = <span class="hljs-keyword">new</span> MyShareMemory(<span class="hljs-number">0x900999</span>,<span class="hljs-number">2000</span>,FLAG);<span class="hljs-comment">//创建共享内存操作对象</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(shareMemory-&gt;createMemory() == <span class="hljs-literal">false</span>)               <span class="hljs-comment">//调用创建方法创建共享内存</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"shareMemory-&gt;Create() false!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;        <span class="hljs-comment">//失败提示信息</span>
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(shareMemory-&gt;attachMemory(pAddrMemory) == <span class="hljs-literal">false</span>)            <span class="hljs-comment">//attach挂接到共享内存</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"shareMemory-&gt;attachMemory(pAddrMemory) false!"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-keyword">if</span>(shareMemory-&gt;detachMemory(pAddrMemory) == <span class="hljs-literal">false</span>)            <span class="hljs-comment">//detach脱离共享内存</span>
+</div><div class="hljs-line">    {
+</div><div class="hljs-line">        <span class="hljs-built_in">cout</span>&lt;&lt;<span class="hljs-string">"shareMemory-&gt; detachMemory (pAddrMemory) false"</span>&lt;&lt;<span class="hljs-built_in">endl</span>;
+</div><div class="hljs-line">    }
+</div><div class="hljs-line">    <span class="hljs-comment">/*if(shareMemory-&gt;destroyMemory() == false)           //销毁共享内存，实际应用可以去注视打开</span>
+</div><div class="hljs-line"><span class="hljs-comment">    {</span>
+</div><div class="hljs-line"><span class="hljs-comment">        cout&lt;&lt;"destroy share memory false!"&lt;&lt;endl;</span>
+</div><div class="hljs-line"><span class="hljs-comment">    }*/</span>
+</div><div class="hljs-line">    <span class="hljs-keyword">delete</span> shareMemory;
+</div><div class="hljs-line">    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+</div><div class="hljs-line">}
+</div></code></pre>
+
+<p>本实例需要编译源文件为testShareMemory.cpp，实例连接共享内存静态库编译使用过程如下。</p>
+
+<pre class="prettyprint hljs-dark"><code class="hljs lsl"><div class="hljs-line">[developer@localhost sharememory]$ g++ -O -o testShareMemory testShareMemory.cpp ./libsharememory.a
+</div><div class="hljs-line">[developer@localhost sharememory]$ ./testShareMemory
+</div><div class="hljs-line">[developer@localhost sharememory]$ ipcs -m
+</div><div class="hljs-line">------ Shared Memory Segments --------
+</div><div class="hljs-line"><span class="hljs-type">key</span>        shmid      owner      perms      bytes      nattch     status
+</div><div class="hljs-line"><span class="hljs-number">0x00000000</span> <span class="hljs-number">0</span>          developer <span class="hljs-number">777</span>        <span class="hljs-number">393216</span>     <span class="hljs-number">2</span>          dest
+</div><div class="hljs-line"><span class="hljs-number">0x00000000</span> <span class="hljs-number">32769</span>      root      <span class="hljs-number">644</span>        <span class="hljs-number">106496</span>     <span class="hljs-number">2</span>          dest
+</div><div class="hljs-line"><span class="hljs-number">0x00900999</span> <span class="hljs-number">786436</span>     developer <span class="hljs-number">600</span>        <span class="hljs-number">2000</span>       <span class="hljs-number">0</span>
+</div></code></pre>
+
+<p>依然按照前面章节介绍静态库连接使用方式，在应用实例中包含需要操作的静态库的头文件，编译程序时只需要连接需要的静态库即可。</p>
+
+<p>上述实例中主要演示了通过共享内存操作类对象接口，创建共享内存、映射并获取可操作共享内存的首地址以及分离共享内存与当前进程地址空间的过程。由于该封装实现的库可以应用于任何需要共享内存操作的应用中，将共享内存常见操作封装实现成库，方便开发人员只需一次实现共享内存操作，即可在需要的地方包含使用。</p>
+
+<p>操作接口中同时还提供了destroyMemory方法接口，通过共享内存控制真正的在程序结束后清除系统中的操作的共享内存。该方法调用在应用实例中注释的原因在于通过ipcs命令检验前面创建共享内存是否成功。</p></div>
