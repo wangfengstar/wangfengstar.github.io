@@ -79,7 +79,7 @@ keywords: PaaS
 
 
 
-<h1 id="docker做了什么">Docker做了什么</h1>
+<h1 id="docker改变了什么">docker改变了什么</h1>
 
 <p>在没有Docker出现以及普及之前，容器核心技术已经存在了，只不过由于涉及linux较为底层的实现，所以在商用的应用领域并没有被太多的普及。</p>
 
@@ -140,7 +140,7 @@ Docker出现以及普及最主要的原因应该还是在容器的技术易用�
 
 
 
-<h1 id="kubernetes做了什么">kubernetes做了什么</h1>
+<h1 id="kubernetes改变了什么">kubernetes改变了什么</h1>
 
 <p>到Docker出现后，容器技术得到开发者的青睐，这个时候传统的PaaS平台面临着从最底层的单个运行环境方面的竞争，毕竟Docker是一家公司的产品，虽然开源了，但是后来也推出了自己的容器编排系统，简述起来就是容器环境的PaaS。</p>
 
