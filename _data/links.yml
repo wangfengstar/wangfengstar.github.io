@@ -6,6 +6,9 @@
 
 - name: Docker
   url: https://www.docker.com/
+
+- name: kubernetes.io
+  url: https://kubernetes.io/zh/
 # - name: 码志
 #   url: http://mazhuang.org
 #
