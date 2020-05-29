@@ -128,3 +128,5 @@ keywords: C++编程
 </div></code></pre>
 
 <p>至此开发者可以在Windows客户端直接操作Linux虚拟机中的内容了，而不需要通过虚拟机的窗口远程连接的方式进行操作，直接可以通过客户端远程连接虚拟机服务端，通过命令方式操作Linux系统，在上面进行开发。</p></div></body></html>
+
+![](C:\Users\wangfeng\Desktop\容器生态技术体系.png)
